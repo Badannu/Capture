@@ -298,9 +298,14 @@ internal abstract class LayeredChromeForm : Form
         graphics.DrawPath(border, path);
     }
 
+    /// <summary>
+    /// Glyph box is a fixed ratio of the slot, not a fixed device-pixel inset.
+    /// The old <c>- 14</c> was a 96-dpi number, so at 150% dpi every icon drew
+    /// ~18% larger than intended (46 device px instead of 39).
+    /// </summary>
     protected static void DrawIcon(Graphics graphics, Action<Graphics, Rectangle, Color> icon, Rectangle slot, Color color)
     {
-        var side = Math.Max(10, Math.Min(slot.Width, slot.Height) - 14);
+        var side = Math.Max(10, (int)Math.Round(Math.Min(slot.Width, slot.Height) * 0.65));
         var box = new Rectangle(slot.Left + (slot.Width - side) / 2, slot.Top + (slot.Height - side) / 2, side, side);
         icon(graphics, box, color);
     }
