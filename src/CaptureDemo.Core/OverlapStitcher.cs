@@ -26,27 +26,67 @@ public static class OverlapStitcher
         }
 
         var minOverlap = Math.Min(Math.Max(1, options.MinOverlap), maxOverlap);
+        // Scroll distance is continuous. Searching the whole band lets a blank page pick a
+        // wrong overlap that scores just as well, so a narrow window around the previous
+        // distance is tried first and only abandoned when it cannot explain the frame.
+        if (TryWindow(options, next.Height, minOverlap, maxOverlap, out var windowLow, out var windowHigh))
+        {
+            var windowed = Search(accumulated, next, windowLow, windowHigh, options);
+            if (windowed.MeanChannelDiff <= options.LowConfidenceMeanDiff)
+            {
+                return windowed;
+            }
+        }
+
+        return Search(accumulated, next, minOverlap, maxOverlap, options);
+    }
+
+    private static OverlapMatch Search(BgraBuffer accumulated, BgraBuffer next, int lowOverlap, int highOverlap, StitchOptions options)
+    {
         var columnStep = Math.Max(1, options.ColumnStep);
         var rowStep = Math.Max(1, options.RowStep);
         var width = Math.Min(accumulated.Width, next.Width);
         var (x0, x1) = FrameMetrics.SampleRange(width, options.RightIgnore);
 
-        var count = maxOverlap - minOverlap + 1;
+        var count = highOverlap - lowOverlap + 1;
         var scores = new double[count];
         var best = double.PositiveInfinity;
-        for (var overlap = minOverlap; overlap <= maxOverlap; overlap++)
+        for (var overlap = lowOverlap; overlap <= highOverlap; overlap++)
         {
             var score = Score(accumulated, next, overlap, options.StripRows, x0, x1, columnStep, rowStep);
-            scores[overlap - minOverlap] = score;
+            scores[overlap - lowOverlap] = score;
             if (score < best)
             {
                 best = score;
             }
         }
 
-        var chosen = Choose(scores, minOverlap, best, options, next.Height);
-        var chosenScore = scores[chosen - minOverlap];
+        var chosen = Choose(scores, lowOverlap, best, options, next.Height);
+        var chosenScore = scores[chosen - lowOverlap];
         return new OverlapMatch(chosen, chosenScore, chosenScore > options.LowConfidenceMeanDiff);
+    }
+
+    private static bool TryWindow(StitchOptions options, int nextHeight, int minOverlap, int maxOverlap, out int low, out int high)
+    {
+        low = 0;
+        high = 0;
+        if (options.PreviousNewRows is not int rows || rows <= 0 || options.SearchWindowFactor <= 1)
+        {
+            return false;
+        }
+
+        var expected = nextHeight - rows;
+        if (expected < minOverlap || expected > maxOverlap)
+        {
+            return false;
+        }
+
+        var slack = Math.Max(options.StripRows / 4, (int)Math.Ceiling(rows * (options.SearchWindowFactor - 1)));
+        low = Math.Max(minOverlap, expected - slack);
+        // A full-frame overlap appends nothing, so it is never the window's answer: reaching the
+        // bottom is decided by the frames being unchanged, not by a blank band scoring zero.
+        high = Math.Min(Math.Min(maxOverlap, nextHeight - 1), expected + slack);
+        return high > low;
     }
 
     public static AppendResult Append(BgraBuffer accumulated, BgraBuffer next, int overlapRows, int maxHeight)

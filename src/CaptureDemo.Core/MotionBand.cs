@@ -39,8 +39,11 @@ public static class MotionBand
     /// <summary>
     /// Returns a crop when a static margin is large enough to be chrome (ribbon, taskbar, page gutter).
     /// A whole-frame scroll, or a caret-sized flicker, returns null.
+    /// <paramref name="keepTop"/> and <paramref name="keepBottom"/> are the fixed bands that the
+    /// caller already found: that edge is then kept whole so the user's status bar survives once,
+    /// instead of being cut down to the padding rows.
     /// </summary>
-    public static FrameCrop? SuggestCrop(int width, int height, MotionSpan span)
+    public static FrameCrop? SuggestCrop(int width, int height, MotionSpan span, int keepTop = 0, int keepBottom = 0)
     {
         if (width < MinSpan || height < MinSpan || span.RowSpan < MinSpan)
         {
@@ -57,8 +60,8 @@ public static class MotionBand
             x1 = Math.Min(width, span.Right + Pad);
         }
 
-        var trimTop = y0 >= MinMargin;
-        var trimBottom = height - y1 >= MinMargin;
+        var trimTop = y0 >= MinMargin && keepTop <= 0;
+        var trimBottom = height - y1 >= MinMargin && keepBottom <= 0;
         var trimLeft = x0 >= MinMargin;
         var trimRight = width - x1 >= MinMargin;
         if (!trimTop && !trimBottom && !trimLeft && !trimRight)

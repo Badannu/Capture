@@ -28,6 +28,12 @@ public sealed record StitchOptions
 
     /// <summary>New rows accepted on the previous successful append, if any.</summary>
     public int? PreviousNewRows { get; init; }
+
+    /// <summary>
+    /// How far around the previous scroll distance the first search may look, as a multiple.
+    /// 2.2 means "between 1/2.2 and 2.2 times the last step". Values at or below 1 disable the window.
+    /// </summary>
+    public double SearchWindowFactor { get; init; } = 2.2;
 }
 
 public sealed record AssemblerOptions
@@ -50,6 +56,13 @@ public sealed record AssemblerOptions
     /// </summary>
     public double IdenticalRowThreshold { get; init; } = 3.0;
 
+    /// <summary>
+    /// Frames that may stitch nothing before the capture gives up.
+    /// A fixed footer with a live page counter can make a single frame look unmovable;
+    /// one such frame must never end a sixty-page document.
+    /// </summary>
+    public int ZeroAppendLimit { get; init; } = 3;
+
     public StitchOptions Stitch { get; init; } = StitchOptions.Default;
 
     /// <summary>How fixed header/footer bands are found before a frame is stitched.</summary>
@@ -59,6 +72,9 @@ public sealed record AssemblerOptions
 public static class StopReasons
 {
     public const string Identical = "identical";
+
+    /// <summary>The frame moved, but no new rows could be aligned.</summary>
+    public const string Stalled = "stalled";
 
     public const string MaxHeight = "max-height";
 }

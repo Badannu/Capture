@@ -218,15 +218,18 @@ public static class ScrollAssembler
     {
         if (appendedRows <= 0)
         {
+            // The frames were not identical, so the page may well have moved: the overlap simply
+            // could not be aligned (a mostly blank page, a live page counter in a fixed footer).
+            // Give it a few more frames instead of ending the capture on the first miss.
             var streak = identicalStreak + 1;
-            var stop = streak >= Math.Max(1, options.IdenticalPairLimit);
+            var stop = streak >= Math.Max(1, options.ZeroAppendLimit);
             return Step(
                 image,
                 frame,
                 streak,
                 lastNewRows,
                 stop,
-                stop ? StopReasons.Identical : null,
+                stop ? StopReasons.Stalled : null,
                 match.LowConfidence,
                 appendedRows: 0,
                 match.OverlapRows,

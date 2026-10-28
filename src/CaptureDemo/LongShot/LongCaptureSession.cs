@@ -181,7 +181,9 @@ internal static class LongCaptureSession
                 var grown = accumulated != null && baseline > 0 && accumulated.Height > baseline + 4;
                 var options = AssemblerOptions.Default with
                 {
-                    IdenticalPairLimit = grown ? 1 : GraceIdenticalPairs,
+                    // Two identical pairs, never one: a fixed footer that updates its page counter
+                    // must not end a long document on a single unlucky sample.
+                    IdenticalPairLimit = grown ? 2 : GraceIdenticalPairs,
                 };
 
                 AssemblyStep step;
@@ -355,7 +357,11 @@ internal static class LongCaptureSession
             motionScreen = new Rectangle(left, top, Math.Max(1, span.ColumnSpan), span.RowSpan);
         }
 
-        var crop = MotionBand.SuggestCrop(frame.Width, frame.Height, span);
+        // Rows that never move are chrome, not content. Knowing where they are keeps the crop from
+        // shaving the status bar down to a few padding rows: it is kept whole and stitched once.
+        var bands = StickyBandDetector.Detect(previous, frame);
+
+        var crop = MotionBand.SuggestCrop(frame.Width, frame.Height, span, bands.Top, bands.Bottom);
         if (crop is not FrameCrop boxed)
         {
             return false;
@@ -379,6 +385,8 @@ internal static class LongCaptureSession
             first.IdenticalStreak,
             first.LastNewRows,
             AssemblerOptions.Default,
+            bands.Top,
+            bands.Bottom,
             detectSticky: true);
         grab = screen;
         motionScreen = screen;
@@ -474,6 +482,7 @@ internal static class LongCaptureSession
         var state = stopReason switch
         {
             StopReasons.Identical => "画面不再变化",
+            StopReasons.Stalled => "连续几帧都没拼上新内容",
             StopReasons.MaxHeight => "已达高度上限",
             "max-frames" => "已达帧数上限",
             _ => manual ? "手动" : "连续慢滚",
@@ -509,6 +518,7 @@ internal static class LongCaptureSession
             : loop.StopReason switch
             {
                 StopReasons.Identical => "滚动已结束。",
+                StopReasons.Stalled => "画面不再往下增长，已保存到这一页。",
                 StopReasons.MaxHeight => "已达到 20000 像素高度上限。",
                 "max-frames" => $"已达到 {MaxFrames} 帧上限。",
                 _ => "长截图完成。",

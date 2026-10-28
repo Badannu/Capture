@@ -397,6 +397,177 @@ public class StitchAndAssemblerTests
         AssertSame(source, acc!);
     }
 
+    [Fact]
+    public void LiveStatusBar_DoesNotEndTheCaptureAndIsKeptOnce()
+    {
+        // A status bar with a live page counter is not "static" row by row: its readout changes
+        // every time the page number changes. Recognition must still treat the whole bar as chrome,
+        // or the bar is stitched as content and the capture stalls after a few frames.
+        const int width = 320;
+        const int height = 420;
+        const int bar = 40;
+        const int step = 18;
+        const int frames = 20;
+        BgraBuffer? acc = null;
+        BgraBuffer? prev = null;
+        var streak = 0;
+        int? lastNew = null;
+        var top = 0;
+        var bottom = 0;
+        for (var i = 0; i < frames; i++)
+        {
+            var frame = LiveStatusFrame(width, height, bar, i * step);
+            var grown = acc != null && acc.Height > height + 4;
+            var options = AssemblerOptions.Default with { IdenticalPairLimit = grown ? 2 : 8 };
+            var step2 = ScrollAssembler.AddFrame(acc, prev, frame, streak, lastNew, options, top, bottom, detectSticky: true);
+            acc = step2.Accumulated;
+            prev = step2.PreviousFrame;
+            streak = step2.IdenticalStreak;
+            lastNew = step2.LastNewRows;
+            top = step2.StickyTop;
+            bottom = step2.StickyBottom;
+            Assert.False(step2.Stop, $"frame {i} stopped early: {step2.StopReason}");
+            Assert.Equal(i == 0 ? height : step, step2.AppendedRows);
+            if (i > 0)
+            {
+                Assert.True(bottom >= bar, $"frame {i} only recognised {bottom} of {bar} status rows");
+            }
+        }
+
+        Assert.Equal(height + step * (frames - 1), acc!.Height);
+        Assert.Equal(bar, CountRowsMatching(acc, 236, 236, 236));
+    }
+
+    [Fact]
+    public void StalledFrame_IsToleratedUntilTheLimit()
+    {
+        // One frame that cannot be aligned must not end the capture: a sparse page or a live
+        // footer can produce it. The default limit gives the next frames a chance.
+        var options = AssemblerOptions.Default;
+        var first = Solid(16, 40, 200, 100, 50);
+        var step = ScrollAssembler.AddFrame(null, null, first, 0, null, options);
+        Assert.Equal(40, step.Accumulated!.Height);
+
+        // Nearly flat frames that differ just enough not to be "identical": every overlap scores the
+        // same, so the stitcher cannot place them and appends nothing.
+        step = ScrollAssembler.AddFrame(step.Accumulated, step.PreviousFrame, Solid(16, 40, 210, 100, 50), step.IdenticalStreak, step.LastNewRows, options);
+        Assert.False(step.Stop, "a single stalled frame ended the capture");
+        Assert.Equal(0, step.AppendedRows);
+        Assert.Null(step.StopReason);
+
+        step = ScrollAssembler.AddFrame(step.Accumulated, step.PreviousFrame, Solid(16, 40, 218, 100, 50), step.IdenticalStreak, step.LastNewRows, options);
+        Assert.False(step.Stop);
+
+        step = ScrollAssembler.AddFrame(step.Accumulated, step.PreviousFrame, Solid(16, 40, 226, 100, 50), step.IdenticalStreak, step.LastNewRows, options);
+        Assert.True(step.Stop);
+        Assert.Equal(StopReasons.Stalled, step.StopReason);
+    }
+
+    [Fact]
+    public void PreviousScrollDistance_KeepsABlankBandFromClaimingTheWholeFrame()
+    {
+        // The bottom band of a mostly blank page matches itself at every offset, so a full search
+        // can pick "everything already seen" and append nothing. The last known distance wins.
+        var blank = BlankPage(24, 300, textTop: 60, textRows: 30);
+        var next = BlankPage(24, 300, textTop: 42, textRows: 30);
+        var options = StitchOptions.Default with { PreviousNewRows = 18 };
+        var match = OverlapStitcher.FindOverlap(blank, next, options);
+        Assert.Equal(282, match.OverlapRows);
+        Assert.False(match.LowConfidence);
+    }
+
+    private static BgraBuffer BlankPage(int width, int height, int textTop, int textRows)
+    {
+        var pixels = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var i = (y * width + x) * 4;
+                var inked = y >= textTop && y < textTop + textRows;
+                pixels[i] = inked ? (byte)(30 + (y * 7) % 200) : (byte)250;
+                pixels[i + 1] = inked ? (byte)(40 + (y * 13) % 190) : (byte)250;
+                pixels[i + 2] = inked ? (byte)(50 + (y * 23) % 180) : (byte)250;
+                pixels[i + 3] = 255;
+            }
+        }
+
+        return new BgraBuffer(width, height, pixels);
+    }
+
+    private static BgraBuffer LiveStatusFrame(int width, int height, int bar, int offset)
+    {
+        var bodyHeight = height - bar;
+        var pixels = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var i = (y * width + x) * 4;
+                byte b;
+                byte g;
+                byte r;
+                if (y >= bodyHeight)
+                {
+                    b = 236;
+                    g = 236;
+                    r = 236;
+                    var row = y - bodyHeight;
+                    if (x >= 20 && x < 90 && row >= 10 && row < 26)
+                    {
+                        // Live page counter: same columns, new glyphs.
+                        var glyph = ((offset / 18) + (x / 7)) % 5;
+                        var v = (byte)(60 + glyph * 35);
+                        b = v;
+                        g = v;
+                        r = v;
+                    }
+                }
+                else if (x >= 90 && x < 230 && (y + offset) % 46 < 11)
+                {
+                    var src = y + offset;
+                    b = (byte)(src & 0xFF);
+                    g = (byte)((src >> 8) & 0x03);
+                    r = (byte)((src % 7) * 30 + 20);
+                }
+                else
+                {
+                    b = 252;
+                    g = 252;
+                    r = 252;
+                }
+
+                pixels[i] = b;
+                pixels[i + 1] = g;
+                pixels[i + 2] = r;
+                pixels[i + 3] = 255;
+            }
+        }
+
+        return new BgraBuffer(width, height, pixels);
+    }
+
+    private static int CountRowsMatching(BgraBuffer image, byte b, byte g, byte r)
+    {
+        var count = 0;
+        for (var y = 0; y < image.Height; y++)
+        {
+            var leftOk = image.Pixels[(y * image.Width) * 4] == b
+                && image.Pixels[(y * image.Width) * 4 + 1] == g
+                && image.Pixels[(y * image.Width) * 4 + 2] == r;
+            var rightIndex = (y * image.Width + image.Width - 1) * 4;
+            var rightOk = image.Pixels[rightIndex] == b
+                && image.Pixels[rightIndex + 1] == g
+                && image.Pixels[rightIndex + 2] == r;
+            if (leftOk && rightOk)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static void AssertSame(BgraBuffer expected, BgraBuffer actual)
     {
         Assert.Equal(expected.Width, actual.Width);
