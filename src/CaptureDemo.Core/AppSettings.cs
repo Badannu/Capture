@@ -13,6 +13,8 @@ public sealed class AppSettings
 
     public const string DefaultLongHotkey = "Ctrl+Alt+L";
 
+    public const string DefaultClipboardHotkey = "Ctrl+Alt+V";
+
     public const string DefaultFilenamePattern = "{kind}-{yyyyMMdd}-{HHmmss}-{fff}";
 
     public string AwakenHotkey { get; set; } = DefaultAwakenHotkey;
@@ -21,12 +23,25 @@ public sealed class AppSettings
 
     public string LongHotkey { get; set; } = DefaultLongHotkey;
 
+    public string ClipboardHotkey { get; set; } = DefaultClipboardHotkey;
+
     /// <summary>Empty means Pictures\CaptureDemo.</summary>
     public string SaveDirectory { get; set; } = "";
 
     public string FilenamePattern { get; set; } = DefaultFilenamePattern;
 
     public bool CopyToClipboard { get; set; } = true;
+
+    /// <summary>Record clipboard items so the history panel has something to show.</summary>
+    public bool WatchClipboard { get; set; } = true;
+
+    /// <summary>How many unpinned clipboard entries to keep.</summary>
+    public int ClipboardLimit { get; set; } = 12;
+
+    public bool LaunchAtStartup { get; set; }
+
+    /// <summary>System / Light / Dark.</summary>
+    public string Appearance { get; set; } = "System";
 
     public int ScrollSpeed { get; set; } = 1;
 
@@ -65,6 +80,17 @@ public sealed class AppSettings
         if (!HotkeyChord.TryParse(LongHotkey, out _))
         {
             LongHotkey = DefaultLongHotkey;
+        }
+
+        if (!HotkeyChord.TryParse(ClipboardHotkey, out _))
+        {
+            ClipboardHotkey = DefaultClipboardHotkey;
+        }
+
+        ClipboardLimit = Math.Clamp(ClipboardLimit, 5, 30);
+        if (Appearance is not ("System" or "Light" or "Dark"))
+        {
+            Appearance = "System";
         }
 
         ScrollSpeed = Math.Clamp(ScrollSpeed, 1, 10);

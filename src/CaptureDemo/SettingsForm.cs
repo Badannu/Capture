@@ -1,124 +1,126 @@
 using CaptureDemo.Core;
+using CaptureDemo.Native;
+using CaptureDemo.Ui;
 
 namespace CaptureDemo;
 
-internal sealed class SettingsForm : Form
+internal sealed class SettingsForm : ShellForm
 {
-    private readonly TextBox _awaken;
-    private readonly TextBox _element;
-    private readonly TextBox _long;
-    private readonly TextBox _directory;
-    private readonly TextBox _pattern;
-    private readonly CheckBox _clipboard;
-    private readonly NumericUpDown _speed;
-    private readonly NumericUpDown _sample;
+    private const int WindowWidth = 600;
+
+    private readonly FieldBox _awaken;
+    private readonly FieldBox _element;
+    private readonly FieldBox _long;
+    private readonly FieldBox _clipboard;
+    private readonly FieldBox _directory;
+    private readonly FieldBox _pattern;
+    private readonly ToggleSwitch _copyToClipboard;
+    private readonly ToggleSwitch _watchClipboard;
+    private readonly ToggleSwitch _startWithWindows;
+    private readonly Picker _limit;
+    private readonly Picker _speed;
+    private readonly Picker _sample;
+    private readonly Picker _appearance;
 
     private SettingsForm(AppSettings settings)
     {
         Text = "设置";
-        Font = UiFonts.Body;
+        Icon = IconFactory.AppIcon();
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        StartPosition = FormStartPosition.CenterScreen;
-        AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(640, 520);
-        MinimumSize = new Size(640, 520);
-        BackColor = Theme.FluentBack;
+        ShowInTaskbar = false;
+        ClientSize = new Size(S(WindowWidth), S(672));
+        var footer = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = S(60),
+            BackColor = Theme.AppBack,
+        };
+        Controls.Add(footer);
 
-        var root = new TableLayoutPanel
+        var content = new BufferedPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = Theme.FluentBack,
-            Padding = new Padding(28, 20, 28, 16),
+            AutoScroll = true,
+            BackColor = Theme.AppBack,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-
-        var grid = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ColumnCount = 2,
-            BackColor = Color.White,
-            Padding = new Padding(20, 16, 20, 12),
-        };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Controls.Add(content);
 
         _awaken = HotkeyBox(settings.AwakenHotkey);
         _element = HotkeyBox(settings.ElementHotkey);
         _long = HotkeyBox(settings.LongHotkey);
-        _directory = Field(settings.SaveDirectory);
+        _clipboard = HotkeyBox(settings.ClipboardHotkey);
+        _directory = Field(settings.SaveDirectory, @"留空则用 图片\CaptureDemo");
         _pattern = Field(settings.FilenamePattern);
-        _clipboard = new CheckBox
+        _copyToClipboard = Toggle(settings.CopyToClipboard);
+        _watchClipboard = Toggle(settings.WatchClipboard);
+        _startWithWindows = Toggle(StartupRegistration.IsEnabled());
+        _limit = Pick(new[] { "5 条", "8 条", "12 条", "16 条", "20 条", "30 条" }, LimitIndex(settings.ClipboardLimit));
+        _speed = Pick(Enumerable.Range(1, 10).Select(value => value + " 级").ToArray(), Math.Clamp(settings.ScrollSpeed, 1, 10) - 1);
+        _sample = Pick(new[] { "60 ms", "80 ms", "120 ms", "160 ms", "200 ms", "300 ms" }, SampleIndex(settings.SampleMilliseconds));
+        _appearance = Pick(new[] { "跟随系统", "浅色", "深色" }, settings.Appearance switch
         {
-            Text = "保存时复制到剪贴板",
-            Checked = settings.CopyToClipboard,
-            AutoSize = true,
-            ForeColor = Theme.Text,
-            Margin = new Padding(0, 8, 0, 4),
-        };
-        _speed = Number(Math.Clamp(settings.ScrollSpeed, 1, 10), 1, 10, 1);
-        _sample = Number(Math.Clamp(settings.SampleMilliseconds, 40, 800), 40, 800, 20);
+            "Light" => 1,
+            "Dark" => 2,
+            _ => 0,
+        });
 
-        var row = 0;
-        row = Section(grid, row, "快捷键");
-        row = Pair(grid, row, "唤醒热键", _awaken);
-        row = Pair(grid, row, "元素热键", _element);
-        row = Pair(grid, row, "长截图热键", _long);
-        row = Section(grid, row, "保存");
-        row = Pair(grid, row, "保存目录", DirectoryRow());
-        row = Pair(grid, row, "文件名", _pattern);
-        grid.Controls.Add(_clipboard, 1, row);
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        row++;
-        row = Section(grid, row, "长截图");
-        row = Pair(grid, row, "滚动速度", _speed);
-        Pair(grid, row, "采样间隔", _sample);
+        var left = S(24);
+        var cardWidth = S(WindowWidth) - (S(24) * 2);
+        var top = S(18);
 
-        var footer = new FlowLayoutPanel
+        top = AddCard(content, "快捷键", top, left, cardWidth, new (string, Control)[]
         {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            BackColor = Theme.FluentBack,
-            Padding = new Padding(0, 8, 0, 0),
-        };
-        var ok = new Button
-        {
-            Text = "保存",
-            AutoSize = true,
-            MinimumSize = new Size(88, 32),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Theme.Accent,
-            ForeColor = Color.White,
-            Margin = new Padding(8, 0, 0, 0),
-        };
-        ok.FlatAppearance.BorderSize = 0;
-        var cancel = new Button
-        {
-            Text = "取消",
-            AutoSize = true,
-            MinimumSize = new Size(88, 32),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Theme.Text,
-            DialogResult = DialogResult.Cancel,
-        };
-        cancel.FlatAppearance.BorderColor = Theme.CardBorder;
-        ok.Click += (_, _) => TryAccept();
-        footer.Controls.Add(ok);
-        footer.Controls.Add(cancel);
+            ("唤醒截图条", _awaken),
+            ("元素截图", _element),
+            ("长截图", _long),
+            ("剪贴板历史", _clipboard),
+        });
 
-        root.Controls.Add(grid, 0, 0);
-        root.Controls.Add(footer, 0, 1);
-        Controls.Add(root);
-        AcceptButton = ok;
-        CancelButton = cancel;
+        top = AddCard(content, "保存", top, left, cardWidth, new (string, Control)[]
+        {
+            ("保存目录", DirectoryRow()),
+            ("文件名模板", _pattern),
+            ("复制到剪贴板", _copyToClipboard),
+        });
+
+        top = AddCard(content, "剪贴板", top, left, cardWidth, new (string, Control)[]
+        {
+            ("记录剪贴板", _watchClipboard),
+            ("保留条数", _limit),
+        });
+
+        top = AddCard(content, "长截图", top, left, cardWidth, new (string, Control)[]
+        {
+            ("滚动速度", _speed),
+            ("采样间隔", _sample),
+        });
+
+        top = AddCard(content, "常规", top, left, cardWidth, new (string, Control)[]
+        {
+            ("外观", _appearance),
+            ("开机自动启动", _startWithWindows),
+        });
+
+        content.AutoScrollMinSize = new Size(0, top);
+        BuildFooter(footer);
+
+        // Size the window to its content instead of a fixed height: a hard-coded value
+        // either clips a card or forces the native scrollbar, which breaks the flat look.
+        var desired = top + S(10) + footer.Height;
+        var maxClient = Screen.FromPoint(Cursor.Position).WorkingArea.Height - S(120);
+        ClientSize = new Size(S(WindowWidth), Math.Clamp(desired, S(320), Math.Max(S(320), maxClient)));
+        Shown += (_, _) =>
+        {
+            _awaken.Inner.Focus();
+            _awaken.Inner.SelectionLength = 0;
+        };
+
+        KeyPreview = true;
     }
+
+    public static SettingsForm CreateForPreview(AppSettings settings) => new(settings);
 
     public static bool TryEdit(IWin32Window owner, AppSettings settings)
     {
@@ -132,20 +134,175 @@ internal sealed class SettingsForm : Form
         settings.AwakenHotkey = form._awaken.Text.Trim();
         settings.ElementHotkey = form._element.Text.Trim();
         settings.LongHotkey = form._long.Text.Trim();
+        settings.ClipboardHotkey = form._clipboard.Text.Trim();
         settings.SaveDirectory = form._directory.Text.Trim();
         settings.FilenamePattern = form._pattern.Text.Trim();
-        settings.CopyToClipboard = form._clipboard.Checked;
-        settings.ScrollSpeed = (int)form._speed.Value;
-        settings.SampleMilliseconds = (int)form._sample.Value;
+        settings.CopyToClipboard = form._copyToClipboard.Checked;
+        settings.WatchClipboard = form._watchClipboard.Checked;
+        settings.ClipboardLimit = LimitValue(form._limit.SelectedIndex);
+        settings.ScrollSpeed = form._speed.SelectedIndex + 1;
+        settings.SampleMilliseconds = SampleValue(form._sample.SelectedIndex);
+        settings.LaunchAtStartup = form._startWithWindows.Checked;
+        settings.Appearance = form._appearance.SelectedIndex switch
+        {
+            1 => "Light",
+            2 => "Dark",
+            _ => "System",
+        };
         settings.Normalize();
         return true;
+    }
+
+    private void BuildFooter(Panel footer)
+    {
+        var reset = new FlatButton
+        {
+            Text = "恢复默认",
+            Variant = ButtonVariant.Ghost,
+            CornerRadius = S(8),
+        };
+        reset.SetBounds(S(24), S(12), S(104), S(36));
+        reset.Clicked += (_, _) => ResetToDefaults();
+        footer.Controls.Add(reset);
+
+        var save = new FlatButton
+        {
+            Text = "保存",
+            Variant = ButtonVariant.Primary,
+            CornerRadius = S(8),
+        };
+        save.SetBounds(S(WindowWidth) - S(24) - S(96), S(12), S(96), S(36));
+        save.Clicked += (_, _) => TryAccept();
+        footer.Controls.Add(save);
+
+        var cancel = new FlatButton
+        {
+            Text = "取消",
+            Variant = ButtonVariant.Secondary,
+            CornerRadius = S(8),
+        };
+        cancel.SetBounds(S(WindowWidth) - S(24) - S(96) - S(88), S(12), S(80), S(36));
+        cancel.Clicked += (_, _) =>
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        };
+        footer.Controls.Add(cancel);
+    }
+
+    private int AddCard(
+        Control host,
+        string title,
+        int top,
+        int left,
+        int width,
+        (string Label, Control Editor)[] rows)
+    {
+        var header = S(34);
+        var rowHeight = S(44);
+        var height = header + (rows.Length * rowHeight) + S(8);
+        var card = new CardPanel { Radius = S(12) };
+        card.SetBounds(left, top, width, height);
+        host.Controls.Add(card);
+
+        var titleLabel = new Label
+        {
+            Text = title,
+            Font = UiFonts.Section,
+            ForeColor = Theme.Muted,
+            BackColor = Theme.Card,
+            AutoSize = false,
+        };
+        titleLabel.SetBounds(S(18), S(12), width - S(36), S(20));
+        card.Controls.Add(titleLabel);
+
+        var labelWidth = S(116);
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var y = header + (i * rowHeight);
+            var label = new Label
+            {
+                Text = rows[i].Label,
+                Font = UiFonts.Body,
+                ForeColor = Theme.Text,
+                BackColor = Theme.Card,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            label.SetBounds(S(18), y, labelWidth, rowHeight);
+            card.Controls.Add(label);
+
+            var editor = rows[i].Editor;
+            var editorLeft = S(18) + labelWidth;
+            if (editor is ToggleSwitch toggle)
+            {
+                // Switches keep their own footprint instead of stretching across the row;
+                // left-aligning them keeps every editor edge on one vertical line.
+                toggle.SetBounds(
+                    editorLeft,
+                    y + ((rowHeight - toggle.Height) / 2),
+                    toggle.Width,
+                    toggle.Height);
+            }
+            else
+            {
+                var editorWidth = width - editorLeft - S(18);
+                var editorHeight = S(34);
+                editor.SetBounds(
+                    editorLeft,
+                    y + ((rowHeight - editorHeight) / 2),
+                    editorWidth,
+                    editorHeight);
+            }
+
+            card.Controls.Add(editor);
+        }
+
+        return top + height + S(12);
+    }
+
+    private Control DirectoryRow()
+    {
+        var panel = new Panel { BackColor = Theme.Card, Height = S(34) };
+        var browse = new FlatButton
+        {
+            Text = "浏览…",
+            Variant = ButtonVariant.Secondary,
+            CornerRadius = S(8),
+            Font = UiFonts.Small,
+        };
+        browse.Clicked += (_, _) => Browse();
+        panel.Controls.Add(_directory);
+        panel.Controls.Add(browse);
+        panel.Resize += (_, _) =>
+        {
+            var buttonWidth = S(78);
+            browse.SetBounds(panel.Width - buttonWidth, 0, buttonWidth, panel.Height);
+            _directory.SetBounds(0, 0, Math.Max(S(40), panel.Width - buttonWidth - S(8)), panel.Height);
+        };
+        return panel;
+    }
+
+    private void Browse()
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "选择截图保存目录",
+            UseDescriptionForTitle = true,
+            SelectedPath = Directory.Exists(_directory.Text) ? _directory.Text : AppSettings.DefaultDirectory(),
+        };
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            _directory.Text = dialog.SelectedPath;
+        }
     }
 
     private void TryAccept()
     {
         if (!HotkeyChord.TryParse(_awaken.Text, out _) ||
             !HotkeyChord.TryParse(_element.Text, out _) ||
-            !HotkeyChord.TryParse(_long.Text, out _))
+            !HotkeyChord.TryParse(_long.Text, out _) ||
+            !HotkeyChord.TryParse(_clipboard.Text, out _))
         {
             MessageBox.Show(this, "热键需要包含一个主键，例如 Ctrl+Alt+S。", "热键无效");
             return;
@@ -160,102 +317,53 @@ internal sealed class SettingsForm : Form
         Close();
     }
 
-    private Control DirectoryRow()
+    private void ResetToDefaults()
     {
-        var panel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            Margin = new Padding(0),
-            Height = 32,
-        };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        _directory.Dock = DockStyle.Fill;
-        _directory.Margin = new Padding(0, 4, 8, 0);
-        var browse = new Button
-        {
-            Text = "浏览…",
-            AutoSize = true,
-            MinimumSize = new Size(84, 28),
-            Margin = new Padding(0, 2, 0, 0),
-            Anchor = AnchorStyles.Right,
-        };
-        browse.Click += (_, _) =>
-        {
-            using var dialog = new FolderBrowserDialog
-            {
-                Description = "选择截图保存目录",
-                UseDescriptionForTitle = true,
-                SelectedPath = Directory.Exists(_directory.Text) ? _directory.Text : AppSettings.DefaultDirectory(),
-            };
-            if (dialog.ShowDialog(this) == DialogResult.OK)
-            {
-                _directory.Text = dialog.SelectedPath;
-            }
-        };
-        panel.Controls.Add(_directory, 0, 0);
-        panel.Controls.Add(browse, 1, 0);
-        return panel;
+        _awaken.Text = AppSettings.DefaultAwakenHotkey;
+        _element.Text = AppSettings.DefaultElementHotkey;
+        _long.Text = AppSettings.DefaultLongHotkey;
+        _clipboard.Text = AppSettings.DefaultClipboardHotkey;
+        _directory.Text = "";
+        _pattern.Text = AppSettings.DefaultFilenamePattern;
+        _copyToClipboard.Checked = true;
+        _watchClipboard.Checked = true;
+        _limit.SelectedIndex = LimitIndex(12);
+        _speed.SelectedIndex = 0;
+        _sample.SelectedIndex = SampleIndex(120);
+        _appearance.SelectedIndex = 0;
     }
 
-    private static int Section(TableLayoutPanel grid, int row, string title)
+    private FieldBox Field(string text, string placeholder = "")
     {
-        var label = new Label
-        {
-            Text = title,
-            Font = UiFonts.Section,
-            ForeColor = Theme.Text,
-            AutoSize = true,
-            Margin = new Padding(0, row == 0 ? 0 : 16, 0, 6),
-        };
-        grid.Controls.Add(label, 0, row);
-        grid.SetColumnSpan(label, 2);
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        return row + 1;
+        var box = new FieldBox { Placeholder = placeholder, Radius = S(8) };
+        box.Text = text;
+        return box;
     }
 
-    private static int Pair(TableLayoutPanel grid, int row, string caption, Control editor)
+    private ToggleSwitch Toggle(bool value)
     {
-        grid.Controls.Add(new Label
-        {
-            Text = caption,
-            AutoSize = false,
-            Size = new Size(140, 28),
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Theme.Text,
-            Margin = new Padding(0, 6, 12, 0),
-        }, 0, row);
-        editor.Margin = new Padding(0, 4, 0, 0);
-        editor.Dock = DockStyle.Fill;
-        grid.Controls.Add(editor, 1, row);
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        return row + 1;
+        var toggle = new ToggleSwitch { Size = new Size(S(44), S(24)) };
+        toggle.SetCheckedSilently(value);
+        return toggle;
     }
 
-    private static TextBox Field(string text) => new()
+    private static Picker Pick(string[] items, int selected)
     {
-        Text = text,
-        BorderStyle = BorderStyle.FixedSingle,
-        Height = 28,
-    };
+        var picker = new Picker();
+        picker.SetItems(items, Math.Clamp(selected, 0, items.Length - 1));
+        return picker;
+    }
 
-    private static NumericUpDown Number(int value, int min, int max, int step) => new()
+    private FieldBox HotkeyBox(string text)
     {
-        Minimum = min,
-        Maximum = max,
-        Increment = step,
-        Value = value,
-        Width = 96,
-        TextAlign = HorizontalAlignment.Left,
-    };
-
-    private static TextBox HotkeyBox(string text)
-    {
-        var box = Field(text);
-        box.ReadOnly = true;
-        box.ShortcutsEnabled = false;
-        box.KeyDown += (_, e) =>
+        var box = new FieldBox { ReadOnly = true, Radius = S(8) };
+        box.Text = text;
+        box.Inner.ShortcutsEnabled = false;
+        box.Inner.Cursor = Cursors.Hand;
+        // WinForms selects the whole value when a read-only box takes focus, which read
+        // as a stray blue block on screen. Deselect after the focus message settles.
+        box.Inner.GotFocus += (_, _) => box.Inner.BeginInvoke(new Action(() => box.Inner.Select(0, 0)));
+        box.Inner.KeyDown += (_, e) =>
         {
             e.Handled = true;
             e.SuppressKeyPress = true;
@@ -299,5 +407,57 @@ internal sealed class SettingsForm : Form
         }
 
         return key.ToString();
+    }
+
+    private static int LimitIndex(int value) => value switch
+    {
+        <= 5 => 0,
+        <= 8 => 1,
+        <= 12 => 2,
+        <= 16 => 3,
+        <= 20 => 4,
+        _ => 5,
+    };
+
+    private static int LimitValue(int index) => index switch
+    {
+        0 => 5,
+        1 => 8,
+        2 => 12,
+        3 => 16,
+        4 => 20,
+        _ => 30,
+    };
+
+    private static int SampleIndex(int value) => value switch
+    {
+        <= 60 => 0,
+        <= 80 => 1,
+        <= 120 => 2,
+        <= 160 => 3,
+        <= 200 => 4,
+        _ => 5,
+    };
+
+    private static int SampleValue(int index) => index switch
+    {
+        0 => 60,
+        1 => 80,
+        2 => 120,
+        3 => 160,
+        4 => 200,
+        _ => 300,
+    };
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Escape)
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return;
+        }
+
+        base.OnKeyDown(e);
     }
 }

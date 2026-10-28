@@ -1,129 +1,86 @@
+using CaptureDemo.Clips;
 using CaptureDemo.Core;
+using CaptureDemo.Native;
+using CaptureDemo.Snip;
+using CaptureDemo.Ui;
 
 namespace CaptureDemo;
 
-internal sealed class MainForm : Form
+internal sealed class MainForm : ShellForm
 {
     private const int HotkeySnip = 0xC0E0;
     private const int HotkeyElement = 0xC0E1;
     private const int HotkeyLong = 0xC0E2;
+    private const int HotkeyClipboard = 0xC0E3;
 
     private readonly LaunchMode _launch;
-    private readonly TextBox _status;
     private readonly AppSettings _settings;
+    private readonly ClipboardService _clipboard;
+    private readonly bool _preview;
+
+    private FlatButton? _start;
+    private FlatButton? _long;
+    private FlatButton? _element;
+    private FlatButton? _clipboardButton;
+    private FlatButton? _settingsButton;
+    private FlatButton? _folderButton;
+    private CardPanel? _captureCard;
+    private CardPanel? _clipboardCard;
+    private Label? _clipboardTitle;
+    private Label? _clipboardDetail;
+    private Label? _status;
+
+    private NotifyIcon? _tray;
     private ToastForm? _toast;
     private string? _lastFile;
     private int _gate;
     private bool _snipHotkey;
     private bool _elementHotkey;
     private bool _longHotkey;
+    private bool _clipboardHotkey;
     private bool _autoStarted;
     private bool _openSettings;
     private bool _allowExit;
     private bool _showWhenDone;
-    private NotifyIcon? _tray;
-    private IntPtr _trayIconHandle;
     private IntPtr _hotkeyWindow;
 
-    public MainForm(LaunchMode launch)
+    public MainForm(LaunchMode launch, bool preview = false, AppSettings? settingsOverride = null)
     {
         _launch = launch;
-        _settings = AppSettings.Load(AppSettings.DefaultFilePath());
-        Font = UiFonts.Body;
-        AutoScaleMode = AutoScaleMode.Font;
+        _preview = preview;
+        _settings = settingsOverride ?? AppSettings.Load(AppSettings.DefaultFilePath());
+        Theme.Apply(ParseAppearance(_settings.Appearance));
+        BackColor = Theme.AppBack;
+        ForeColor = Theme.Text;
+        _clipboard = new ClipboardService(_settings, listen: !preview, store: null);
+        _clipboard.Changed += UpdateClipboardCard;
+
         Text = "截图";
+        Icon = IconFactory.AppIcon();
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(420, 280);
-        ClientSize = new Size(440, 300);
-        BackColor = Theme.FluentBack;
+        DoubleBuffered = true;
         KeyPreview = true;
-
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(28, 24, 28, 16),
-            ColumnCount = 1,
-            RowCount = 4,
-            BackColor = Theme.FluentBack,
-        };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        root.Controls.Add(new Label
-        {
-            Text = "截图",
-            Font = UiFonts.Title,
-            ForeColor = Theme.Text,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-        }, 0, 0);
-
-        var start = new Button
-        {
-            Text = "开始截图",
-            Dock = DockStyle.Fill,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Theme.Accent,
-            ForeColor = Color.White,
-            Margin = new Padding(0, 4, 0, 4),
-        };
-        start.FlatAppearance.BorderSize = 0;
-        start.Click += (_, _) => _ = StartSnipAsync();
-
-        var row = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Theme.FluentBack,
-            Padding = new Padding(0, 6, 0, 0),
-        };
-        var settingsButton = new Button
-        {
-            Text = "设置",
-            AutoSize = true,
-            MinimumSize = new Size(88, 32),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Theme.Text,
-        };
-        settingsButton.FlatAppearance.BorderColor = Theme.CardBorder;
-        settingsButton.Click += (_, _) => EditSettings();
-        var folderLink = new LinkLabel
-        {
-            Text = "打开保存目录",
-            AutoSize = true,
-            LinkColor = Theme.Accent,
-            ActiveLinkColor = Theme.Accent,
-            VisitedLinkColor = Theme.Accent,
-            Margin = new Padding(16, 8, 0, 0),
-        };
-        folderLink.LinkClicked += (_, _) => OpenFolder();
-        row.Controls.Add(settingsButton);
-        row.Controls.Add(folderLink);
-
-        _status = new TextBox
-        {
-            Dock = DockStyle.Fill,
-            Multiline = true,
-            ReadOnly = true,
-            BorderStyle = BorderStyle.None,
-            BackColor = Theme.FluentBack,
-            ForeColor = Theme.Muted,
-            TabStop = false,
-            Text = "",
-        };
-
-        root.Controls.Add(start, 0, 1);
-        root.Controls.Add(row, 0, 2);
-        root.Controls.Add(_status, 0, 3);
-        Controls.Add(root);
+        ClientSize = new Size(S(480), S(402));
+        BuildContent();
     }
+
+    private static Appearance ParseAppearance(string value) => value switch
+    {
+        "Light" => Appearance.Light,
+        "Dark" => Appearance.Dark,
+        _ => Appearance.System,
+    };
 
     protected override void SetVisibleCore(bool value)
     {
+        if (_preview)
+        {
+            base.SetVisibleCore(value);
+            return;
+        }
+
         if (!IsHandleCreated)
         {
             CreateHandle();
@@ -142,6 +99,12 @@ internal sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        if (_preview)
+        {
+            _autoStarted = true;
+            return;
+        }
+
         WindowAffinity.TryExcludeFromCapture(Handle);
         _hotkeyWindow = Handle;
         EnsureTray();
@@ -181,45 +144,231 @@ internal sealed class MainForm : Form
             {
                 case HotkeySnip:
                     _ = StartSnipAsync();
-                    break;
+                    return;
                 case HotkeyElement:
                     _ = StartElementAsync();
-                    break;
+                    return;
                 case HotkeyLong:
                     _ = StartLongAsync();
-                    break;
+                    return;
+                case HotkeyClipboard:
+                    _clipboard.TogglePanel();
+                    return;
             }
+        }
+
+        if (SingleInstance.Message != 0 && m.Msg == SingleInstance.Message)
+        {
+            var mode = (LaunchMode)m.WParam.ToInt32();
+            ShowFromTray();
+            if (mode != LaunchMode.Menu)
+            {
+                StartFromLaunch();
+            }
+
+            return;
         }
 
         base.WndProc(ref m);
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
+    // ── layout ──────────────────────────────────────────────────────────────
+    private void BuildContent()
     {
-        if (Matches(e, _settings.AwakenHotkey))
-        {
-            e.Handled = true;
-            _ = StartSnipAsync();
-            return;
-        }
+        SuspendLayout();
+        Controls.Clear();
 
-        if (Matches(e, _settings.ElementHotkey))
-        {
-            e.Handled = true;
-            _ = StartElementAsync();
-            return;
-        }
+        var pad = S(24);
+        var width = S(480) - (pad * 2);
 
-        if (Matches(e, _settings.LongHotkey))
-        {
-            e.Handled = true;
-            _ = StartLongAsync();
-            return;
-        }
+        _captureCard = new CardPanel { Radius = S(12) };
+        _captureCard.SetBounds(pad, S(88), width, S(128));
+        Controls.Add(_captureCard);
 
-        base.OnKeyDown(e);
+        _start = new FlatButton
+        {
+            Text = "开始截图",
+            Variant = ButtonVariant.Primary,
+            Glyph = SnipIcons.Rect,
+            GlyphSize = S(20),
+            CornerRadius = S(9),
+            Font = UiFonts.ButtonTitle,
+        };
+        _start.SetBounds(S(14), S(14), width - S(28), S(46));
+        _start.Clicked += (_, _) => _ = StartSnipAsync();
+        _captureCard.Controls.Add(_start);
+
+        var chipWidth = (width - S(28) - S(16)) / 3;
+        _long = Chip("长截图", SnipIcons.Long, S(14), S(70), chipWidth);
+        _long.Clicked += (_, _) => _ = StartLongAsync();
+        _element = Chip("元素截图", SnipIcons.Element, S(14) + chipWidth + S(8), S(70), chipWidth);
+        _element.Clicked += (_, _) => _ = StartElementAsync();
+        _clipboardButton = Chip("剪贴板", SnipIcons.Clipboard, S(14) + ((chipWidth + S(8)) * 2), S(70), chipWidth);
+        _clipboardButton.Clicked += (_, _) => _clipboard.TogglePanel();
+        _captureCard.Controls.Add(_long);
+        _captureCard.Controls.Add(_element);
+        _captureCard.Controls.Add(_clipboardButton);
+
+        _clipboardCard = new CardPanel { Radius = S(12) };
+        _clipboardCard.SetBounds(pad, S(228), width, S(84));
+        Controls.Add(_clipboardCard);
+
+        _clipboardTitle = new Label
+        {
+            Text = "剪贴板",
+            Font = UiFonts.BodyBold,
+            ForeColor = Theme.Text,
+            BackColor = Theme.Card,
+            AutoSize = false,
+        };
+        _clipboardTitle.SetBounds(S(16), S(13), width - S(120), S(20));
+
+        _clipboardDetail = new Label
+        {
+            Text = "",
+            Font = UiFonts.Small,
+            ForeColor = Theme.Muted,
+            BackColor = Theme.Card,
+            AutoEllipsis = true,
+            AutoSize = false,
+        };
+        _clipboardDetail.SetBounds(S(16), S(37), width - S(120), S(20));
+
+        var openClipboard = new FlatButton
+        {
+            Text = "打开",
+            Variant = ButtonVariant.Ghost,
+            Glyph = SnipIcons.Open,
+            GlyphSize = S(15),
+            CornerRadius = S(7),
+        };
+        openClipboard.SetBounds(width - S(96), S(24), S(80), S(34));
+        openClipboard.Clicked += (_, _) => _clipboard.ShowPanel();
+        _clipboardCard.Controls.Add(_clipboardTitle);
+        _clipboardCard.Controls.Add(_clipboardDetail);
+        _clipboardCard.Controls.Add(openClipboard);
+
+        _status = new Label
+        {
+            Text = "",
+            Font = UiFonts.Small,
+            ForeColor = Theme.Muted,
+            BackColor = Theme.AppBack,
+            AutoEllipsis = true,
+            AutoSize = false,
+        };
+        _status.SetBounds(pad, S(316), width, S(20));
+        Controls.Add(_status);
+
+        _settingsButton = new FlatButton
+        {
+            Text = "设置",
+            Variant = ButtonVariant.Secondary,
+            Glyph = SnipIcons.Sliders,
+            GlyphSize = S(16),
+            CornerRadius = S(8),
+        };
+        _settingsButton.SetBounds(pad, S(340), S(96), S(36));
+        _settingsButton.Clicked += (_, _) => EditSettings();
+        Controls.Add(_settingsButton);
+
+        _folderButton = new FlatButton
+        {
+            Text = "打开保存目录",
+            Variant = ButtonVariant.Secondary,
+            Glyph = SnipIcons.Folder,
+            GlyphSize = S(16),
+            CornerRadius = S(8),
+        };
+        _folderButton.SetBounds(pad + S(104), S(340), S(152), S(36));        _folderButton.Clicked += (_, _) => OpenFolder();
+        Controls.Add(_folderButton);
+
+        ResumeLayout();
+        UpdateClipboardCard();
+        Invalidate();
     }
 
+    private FlatButton Chip(string text, Action<Graphics, Rectangle, Color> glyph, int x, int y, int width)
+    {
+        var button = new FlatButton
+        {
+            Text = text,
+            Variant = ButtonVariant.Ghost,
+            Glyph = glyph,
+            GlyphSize = S(17),
+            GlyphGap = S(6),
+            CornerRadius = S(8),
+        };
+        button.SetBounds(x, y, width, S(34));
+        return button;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        var pad = S(24);
+        var tile = new Rectangle(pad, S(18), S(44), S(44));
+        using (var path = UiKit.Rounded(tile, S(11)))
+        using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                   tile,
+                   Theme.IsDark ? Color.FromArgb(70, 74, 84) : Color.FromArgb(48, 52, 60),
+                   Theme.IsDark ? Color.FromArgb(38, 40, 46) : Color.FromArgb(24, 26, 30),
+                   System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+        {
+            g.FillPath(brush, path);
+        }
+
+        SnipIcons.CaptureMark(g, tile, Color.FromArgb(246, 247, 250), 1.65f);
+
+        TextRenderer.DrawText(
+            g,
+            "截图",
+            UiFonts.Title,
+            new Rectangle(tile.Right + S(12), S(16), S(240), S(28)),
+            Theme.Text,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+
+        TextRenderer.DrawText(
+            g,
+            _settings.AwakenHotkey + " 随时开始 · 关闭窗口后常驻托盘",
+            UiFonts.Small,
+            new Rectangle(tile.Right + S(12), S(44), S(360), S(20)),
+            Theme.Muted,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+
+        base.OnPaint(e);
+    }
+
+    private void UpdateClipboardCard()
+    {
+        if (_clipboardDetail == null || _clipboardTitle == null || IsDisposed)
+        {
+            return;
+        }
+
+        var items = _clipboard.History.Ordered();
+        _clipboardTitle.Text = items.Count == 0 ? "剪贴板" : $"剪贴板 · {items.Count} 条";
+        _clipboardDetail.Text = items.Count == 0
+            ? "复制点什么，这里就会出现最近记录"
+            : items[0].KindLabel + " · " + items[0].Headline;
+    }
+
+    private void ApplyTheme()
+    {
+        Theme.Apply(ParseAppearance(_settings.Appearance));
+        BackColor = Theme.AppBack;
+        ForeColor = Theme.Text;
+        BuildContent();
+        SeedTray();
+        if (IsHandleCreated)
+        {
+            ApplyChrome(Handle);
+        }
+    }
+
+    // ── capture entry points ────────────────────────────────────────────────
     private async Task StartSnipAsync()
     {
         if (Interlocked.Exchange(ref _gate, 1) == 1)
@@ -228,6 +377,7 @@ internal sealed class MainForm : Form
         }
 
         _showWhenDone = Visible;
+        _clipboard.HidePanel();
         try
         {
             HideToTray();
@@ -267,6 +417,7 @@ internal sealed class MainForm : Form
         }
 
         _showWhenDone = Visible;
+        _clipboard.HidePanel();
         try
         {
             HideToTray();
@@ -290,6 +441,7 @@ internal sealed class MainForm : Form
         }
 
         _showWhenDone = Visible;
+        _clipboard.HidePanel();
         try
         {
             HideToTray();
@@ -327,6 +479,7 @@ internal sealed class MainForm : Form
 
     private void EditSettings()
     {
+        var appearanceBefore = _settings.Appearance;
         if (!SettingsForm.TryEdit(this, _settings))
         {
             return;
@@ -342,8 +495,14 @@ internal sealed class MainForm : Form
             return;
         }
 
+        _clipboard.ApplySettings();
+        StartupRegistration.Set(_settings.LaunchAtStartup);
         RegisterHotkeys();
         SetStatus("设置已保存。");
+        if (!string.Equals(appearanceBefore, _settings.Appearance, StringComparison.Ordinal))
+        {
+            ApplyTheme();
+        }
     }
 
     private void RegisterHotkeys()
@@ -357,9 +516,10 @@ internal sealed class MainForm : Form
         _snipHotkey = TryRegister(HotkeySnip, _settings.AwakenHotkey);
         _elementHotkey = TryRegister(HotkeyElement, _settings.ElementHotkey);
         _longHotkey = TryRegister(HotkeyLong, _settings.LongHotkey);
-        if (!_snipHotkey || !_elementHotkey || !_longHotkey)
+        _clipboardHotkey = TryRegister(HotkeyClipboard, _settings.ClipboardHotkey);
+        if (!_snipHotkey || !_elementHotkey || !_longHotkey || !_clipboardHotkey)
         {
-            SetStatus("有全局热键没有注册成功（可能被别的程序占用）。窗口在前面时仍可用同一组按键。");
+            SetStatus("有全局热键没有注册成功（可能被别的程序占用）。");
         }
     }
 
@@ -395,22 +555,15 @@ internal sealed class MainForm : Form
             NativeMethods.UnregisterHotKey(_hotkeyWindow, HotkeyLong);
         }
 
+        if (_clipboardHotkey)
+        {
+            NativeMethods.UnregisterHotKey(_hotkeyWindow, HotkeyClipboard);
+        }
+
         _snipHotkey = false;
         _elementHotkey = false;
         _longHotkey = false;
-    }
-
-    private static bool Matches(KeyEventArgs e, string text)
-    {
-        if (!HotkeyChord.TryParse(text, out var chord) || (int)e.KeyCode != chord.VirtualKey)
-        {
-            return false;
-        }
-
-        var ctrl = (chord.Modifiers & HotkeyChord.ModControl) != 0;
-        var alt = (chord.Modifiers & HotkeyChord.ModAlt) != 0;
-        var shift = (chord.Modifiers & HotkeyChord.ModShift) != 0;
-        return e.Control == ctrl && e.Alt == alt && e.Shift == shift;
+        _clipboardHotkey = false;
     }
 
     private void Apply(CaptureOutcome outcome)
@@ -462,6 +615,13 @@ internal sealed class MainForm : Form
             return;
         }
 
+        if (_launch == LaunchMode.Clipboard)
+        {
+            HideToTray();
+            _clipboard.ShowPanel();
+            return;
+        }
+
         if (!_snipHotkey || !_elementHotkey || !_longHotkey)
         {
             ShowFromTray();
@@ -469,9 +629,10 @@ internal sealed class MainForm : Form
         }
 
         HideToTray();
-        _tray?.ShowBalloonTip(2800, "截图", "已在托盘。左键打开主窗口，右键可以选择截图或退出。", ToolTipIcon.None);
+        _tray?.ShowBalloonTip(2600, "截图", "已在托盘。左键打开主窗口，右键可用剪贴板、截图或退出。", ToolTipIcon.None);
     }
 
+    // ── tray ────────────────────────────────────────────────────────────────
     private void EnsureTray()
     {
         if (_tray != null)
@@ -479,19 +640,11 @@ internal sealed class MainForm : Form
             return;
         }
 
-        _trayIconHandle = CreateTrayIcon();
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("打开主窗口", null, (_, _) => ShowFromTray());
-        menu.Items.Add("截图", null, (_, _) => _ = StartSnipAsync());
-        menu.Items.Add("设置", null, (_, _) => EditSettings());
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => ExitApp());
         _tray = new NotifyIcon
         {
-            Icon = Icon.FromHandle(_trayIconHandle),
+            Icon = IconFactory.TrayIcon(),
             Text = "截图",
             Visible = true,
-            ContextMenuStrip = menu,
         };
         _tray.MouseClick += (_, e) =>
         {
@@ -500,6 +653,68 @@ internal sealed class MainForm : Form
                 ShowFromTray();
             }
         };
+        SeedTray();
+    }
+
+    private void SeedTray()
+    {
+        if (_tray == null)
+        {
+            return;
+        }
+
+        var menu = BuildTrayMenu();
+        var previous = _tray.ContextMenuStrip;
+        _tray.ContextMenuStrip = menu;
+        previous?.Dispose();
+    }
+
+    /// <summary>Shared with the dev preview so the tray menu can be reviewed as an image.</summary>
+    internal ContextMenuStrip BuildTrayMenu()
+    {
+        var menu = new ContextMenuStrip
+        {
+            Renderer = new FluentMenuRenderer(),
+            BackColor = Theme.Card,
+            ForeColor = Theme.Text,
+            Font = UiFonts.Body,
+            ShowImageMargin = true,
+            Padding = new Padding(4),
+        };
+        menu.Items.Add(TrayItem("打开主窗口", null, () => ShowFromTray(), bold: true));
+        menu.Items.Add(TrayItem("截图", SnipIcons.Rect, () => _ = StartSnipAsync(), shortcut: _settings.AwakenHotkey));
+        menu.Items.Add(TrayItem("长截图", SnipIcons.Long, () => _ = StartLongAsync(), shortcut: _settings.LongHotkey));
+        menu.Items.Add(TrayItem("元素截图", SnipIcons.Element, () => _ = StartElementAsync(), shortcut: _settings.ElementHotkey));
+        menu.Items.Add(TrayItem("剪贴板", SnipIcons.Clipboard, () => _clipboard.ShowPanel(), shortcut: _settings.ClipboardHotkey));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(TrayItem("设置", SnipIcons.Sliders, EditSettings));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(TrayItem("退出", null, ExitApp));
+        return menu;
+    }
+
+    private ToolStripMenuItem TrayItem(
+        string text,
+        Action<Graphics, Rectangle, Color>? glyph,
+        Action action,
+        bool bold = false,
+        string? shortcut = null)
+    {
+        var item = new ToolStripMenuItem(text)
+        {
+            ForeColor = Theme.Text,
+            Font = bold ? UiFonts.BodyBold : UiFonts.Body,
+            Padding = new Padding(4, 3, 4, 3),
+            ShortcutKeyDisplayString = string.IsNullOrWhiteSpace(shortcut) ? null : shortcut,
+        };
+        if (glyph != null)
+        {
+            item.Image = UiKit.GlyphBitmap(glyph, Theme.Text, S(18));
+            item.ImageScaling = ToolStripItemImageScaling.None;
+        }
+
+        item.Click += (_, _) => action();
+        return item;
     }
 
     private void HideToTray()
@@ -528,37 +743,18 @@ internal sealed class MainForm : Form
         if (_tray != null)
         {
             _tray.Visible = false;
+            _tray.ContextMenuStrip?.Dispose();
             _tray.Dispose();
             _tray = null;
         }
 
-        if (_trayIconHandle != IntPtr.Zero)
-        {
-            NativeMethods.DestroyIcon(_trayIconHandle);
-            _trayIconHandle = IntPtr.Zero;
-        }
-
+        _clipboard.Dispose();
         Application.Exit();
-    }
-
-    private static IntPtr CreateTrayIcon()
-    {
-        using var bitmap = new Bitmap(32, 32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using (var graphics = Graphics.FromImage(bitmap))
-        {
-            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            graphics.Clear(Color.Transparent);
-            using var brush = new SolidBrush(Color.FromArgb(32, 32, 32));
-            graphics.FillEllipse(brush, 1, 1, 30, 30);
-            SnipIcons.Rect(graphics, new Rectangle(9, 9, 14, 14), Color.White);
-        }
-
-        return bitmap.GetHicon();
     }
 
     private void SetStatus(string message)
     {
-        if (!IsDisposed)
+        if (!IsDisposed && _status != null)
         {
             _status.Text = message;
         }

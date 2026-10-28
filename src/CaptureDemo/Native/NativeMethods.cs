@@ -22,6 +22,10 @@ internal static class NativeMethods
     public const int WmSysKeyDown = 0x0104;
     public const int WmHotkey = 0x0312;
 
+    public const int WmClipboardUpdate = 0x031D;
+
+    public const uint PwRenderFullContent = 0x00000002;
+
     public const int VkEscape = 0x1B;
     public const uint LlmhfInjected = 0x00000001;
 
@@ -178,6 +182,15 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool AddClipboardFormatListener(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool RemoveClipboardFormatListener(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetDC(IntPtr hWnd);
