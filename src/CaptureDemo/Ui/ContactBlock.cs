@@ -84,7 +84,7 @@ internal sealed class ContactBlock : Control
                 LineFlags);
 
             var valueLeft = left + ValueOffset(i);
-            var valueWidth = TextRenderer.MeasureText(_rows[i].Value, UiFonts.Body).Width;
+            var valueWidth = TextWidth(_rows[i].Value, UiFonts.Body);
             var valueRect = new Rectangle(valueLeft, top, valueWidth, S(BaseRowHeight));
             TextRenderer.DrawText(
                 g,
@@ -189,31 +189,36 @@ internal sealed class ContactBlock : Control
         Invalidate();
     }
 
-    /// <summary>Rows are laid out as one left-aligned block, centred as a whole.</summary>
+    /// <summary>
+    /// Left edge of the block. The longest row (the mail address) is the block's width, so
+    /// centring on it puts equal air on both sides; the caption and the shorter row then
+    /// hang off the same left edge without dragging the block sideways.
+    /// </summary>
     private int GroupLeft()
     {
-        var width = TextRenderer.MeasureText(_caption, UiFonts.Section).Width;
+        var width = TextWidth(_caption, UiFonts.Section);
         for (var i = 0; i < _rows.Length; i++)
         {
-            width = Math.Max(width, ValueOffset(i) + TextRenderer.MeasureText(_rows[i].Value, UiFonts.Body).Width);
+            width = Math.Max(width, RowInk(i));
         }
 
         return Math.Max(S(2), (Width - width) / 2);
     }
 
+    /// <summary>Ink width of one row: the label, one space, and the value.</summary>
+    private int RowInk(int index) => ValueOffset(index) + TextWidth(_rows[index].Value, UiFonts.Body);
+
     /// <summary>
     /// Distance from the block's left edge to the value: the label plus one space.
     /// <para>
-    /// Measuring the label alone would add TextRenderer's ~3px padding on both the label
-    /// and the value rect, leaving a gap that reads as two spaces. Measuring the full line
-    /// and subtracting the value cancels that padding on both sides.
+    /// Both measurements drop TextRenderer's padding (<see cref="LineFlags"/>), so the
+    /// difference is the glyph advance of "label + space" and the gap is exactly one space.
     /// </para>
     /// </summary>
     private int ValueOffset(int index)
     {
         var value = _rows[index].Value;
-        return TextRenderer.MeasureText(LabelText(index) + " " + value, UiFonts.Body).Width -
-            TextRenderer.MeasureText(value, UiFonts.Body).Width;
+        return TextWidth(LabelText(index) + " " + value, UiFonts.Body) - TextWidth(value, UiFonts.Body);
     }
 
     private string LabelText(int index) => _rows[index].Label + ":";
@@ -224,8 +229,7 @@ internal sealed class ContactBlock : Control
     /// <summary>Hit area covers the text only, so a hand cursor never appears over empty space.</summary>
     private Rectangle RowBounds(int index)
     {
-        var width = ValueOffset(index) + TextRenderer.MeasureText(_rows[index].Value, UiFonts.Body).Width;
-        return new Rectangle(GroupLeft(), RowTop(index), width, S(BaseRowHeight));
+        return new Rectangle(GroupLeft(), RowTop(index), RowInk(index), S(BaseRowHeight));
     }
 
     private int HitIndex(Point point)
@@ -243,6 +247,32 @@ internal sealed class ContactBlock : Control
 
     private int S(int px) => Math.Max(1, (int)Math.Round(px * _scale));
 
+    /// <summary>
+    /// Ink width, i.e. the glyphs and nothing else. Measured and drawn with the same
+    /// <see cref="LineFlags"/>, so the numbers here are what lands on screen and a
+    /// centred block is centred by pixels rather than by an estimate.
+    /// </summary>
+    private static int TextWidth(string text, Font font) =>
+        TextRenderer.MeasureText(text, font, MeasureBounds, LineFlags).Width;
+
+    /// <summary>Dev-only: layout numbers, so --ui-demo screenshots can be checked against math.</summary>
+    internal string Probe()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"bounds={Bounds} groupLeft={GroupLeft()} caption={TextWidth(_caption, UiFonts.Section)}");
+        for (var i = 0; i < _rows.Length; i++)
+        {
+            sb.Append($" | row{i}: off={ValueOffset(i)} val={TextWidth(_rows[i].Value, UiFonts.Body)}");
+        }
+
+        return sb.ToString();
+    }
+
+    private static readonly Size MeasureBounds = new(short.MaxValue, short.MaxValue);
+
     private const TextFormatFlags LineFlags =
-        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix;
+        TextFormatFlags.Left |
+        TextFormatFlags.VerticalCenter |
+        TextFormatFlags.NoPrefix |
+        TextFormatFlags.NoPadding;
 }

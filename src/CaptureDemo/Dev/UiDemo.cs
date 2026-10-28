@@ -48,7 +48,7 @@ internal static class UiDemo
                 Pump();
                 File.AppendAllText(
                     Path.Combine(folder, "scroll.txt"),
-                    $"settings-{tag}: {form.DebugScroll()}{Environment.NewLine}");
+                    $"settings-{tag}: {form.DebugScroll()}{Environment.NewLine}contact: {form.DebugContact()}{Environment.NewLine}");
                 Save(form, Path.Combine(folder, $"settings-{tag}-bottom.png"));
                 form.FlashContactCopyForPreview();
                 Pump();

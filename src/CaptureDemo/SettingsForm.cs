@@ -179,6 +179,9 @@ internal sealed class SettingsForm : ShellForm
     /// <summary>Dev-only: parks the sheet at its end so the version stamp can be reviewed.</summary>
     internal void ScrollToEndForPreview() => _scroll.ScrollToEnd();
 
+    /// <summary>Dev-only: contact block layout numbers for --ui-demo.</summary>
+    internal string DebugContact() => _contact.Probe();
+
     /// <summary>Dev-only: triggers the "copied" flash so its position can be reviewed.</summary>
     internal void FlashContactCopyForPreview() => _contact.CopyRow(1);
 
