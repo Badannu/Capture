@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace CaptureDemo.Core;
 
 /// <summary>
-/// Local preferences. Stored as JSON under %AppData%\CaptureDemo\settings.json.
+/// Local preferences. Stored as JSON under %AppData%\Capture\settings.json, or next to the
+/// exe when the folder carries a <c>portable.txt</c> marker.
 /// </summary>
 public sealed class AppSettings
 {
@@ -25,7 +26,7 @@ public sealed class AppSettings
 
     public string ClipboardHotkey { get; set; } = DefaultClipboardHotkey;
 
-    /// <summary>Empty means Pictures\CaptureDemo.</summary>
+    /// <summary>Empty means Pictures\Capture.</summary>
     public string SaveDirectory { get; set; } = "";
 
     public string FilenamePattern { get; set; } = DefaultFilenamePattern;
@@ -39,6 +40,18 @@ public sealed class AppSettings
     public int ClipboardLimit { get; set; } = 12;
 
     public bool LaunchAtStartup { get; set; }
+
+    /// <summary>
+    /// Fingerprint of the hotkey conflicts we already interrupted the user for
+    /// (<see cref="HotkeyConflictFingerprint"/>). Empty means "never told", which is also
+    /// what a settings file written before 1.5.0 looks like — so an upgrade still gets one
+    /// popup, and then goes quiet while nothing changes.
+    /// <para>
+    /// Clear it whenever the conflict set goes back to empty, otherwise the first popup
+    /// would silence every later one.
+    /// </para>
+    /// </summary>
+    public string HotkeyConflictNotice { get; set; } = string.Empty;
 
     /// <summary>
     /// Closing the window leaves the app running in the tray with its global hotkeys
@@ -156,6 +169,11 @@ public sealed class AppSettings
         }
 
         ClipboardLimit = Math.Clamp(ClipboardLimit, 5, 30);
+
+        // Missing in a pre-1.5.0 file (and thus empty here): treated as "never prompted",
+        // trimmed otherwise so a hand-edited file cannot produce a phantom new conflict.
+        HotkeyConflictNotice = HotkeyConflictFingerprint.Record(HotkeyConflictNotice);
+
         if (Appearance is not ("System" or "Light" or "Dark"))
         {
             Appearance = "System";

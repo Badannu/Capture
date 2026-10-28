@@ -1,9 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using CaptureDemo.Capture;
 using CaptureDemo.Clips;
 using CaptureDemo.Core;
-using CaptureDemo.Snip;
 
 namespace CaptureDemo.Ui;
 
@@ -200,7 +198,7 @@ internal sealed class ClipboardForm : Form
 
             if (_clearRect.Contains(e.Location) && Items.Count > 0)
             {
-                _service.ClearAll();
+                _service.ClearAll(this);
                 _scroll = 0;
                 Render();
                 return;
@@ -618,7 +616,7 @@ internal sealed class ClipboardForm : Form
         Add(menu, SnipIcons.Pin, entry.Pinned ? "取消置顶" : "置顶", () => _service.TogglePin(entry));
         Add(menu, SnipIcons.Trash, "删除", () => _service.Delete(entry));
         menu.Items.Add(new ToolStripSeparator());
-        Add(menu, SnipIcons.Trash, "清空历史", () => _service.ClearAll());
+        Add(menu, SnipIcons.Trash, "清空历史", () => _service.ClearAll(this));
     }
 
     private void OnMenuClosed(object? sender, ToolStripDropDownClosedEventArgs e)

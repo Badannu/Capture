@@ -5,7 +5,9 @@
     语义化版本：主版本.次版本.修订号。新增功能 +1 次版本，只修 bug +1 修订号。
   -->
   <PropertyGroup>
-    <Version>1.4.4</Version>
-    <Product>CaptureDemo</Product>
+    <Version>1.5.0</Version>
+    <Product>Capture</Product>
+    <!-- Same string as the LICENSE holder, so the exe's 属性 → 详细信息 page agrees with it. -->
+    <Company>Capture contributors</Company>
   </PropertyGroup>
 </Project>

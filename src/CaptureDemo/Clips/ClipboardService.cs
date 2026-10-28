@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using CaptureDemo.Core;
-using CaptureDemo.Ui;
 
 namespace CaptureDemo.Clips;
 
@@ -16,6 +15,7 @@ internal sealed class ClipboardService : IDisposable
     private readonly ClipboardStore _store;
     private readonly ClipboardHistory _history;
     private readonly ClipboardWatcher? _watcher;
+    private readonly bool _indexWritable;
     private ClipboardForm? _panel;
     private DateTime _ignoreUntil;
 
@@ -28,10 +28,18 @@ internal sealed class ClipboardService : IDisposable
     {
         _settings = settings;
         _store = store ?? new ClipboardStore();
-        _history = ClipboardIndex.Load(_store.IndexPath, settings.ClipboardLimit);
+        var load = ClipboardIndex.LoadWithStatus(_store.IndexPath, settings.ClipboardLimit);
+        _history = load.History;
+        _indexWritable = load.CanRewrite;
         if (listen)
         {
-            _store.PruneOrphans(_history);
+            // An empty history produced by a failed read is not evidence that the folder holds
+            // nothing but leftovers. Sweeping on it would delete every PNG the user owns.
+            if (load.Status != ClipboardIndexStatus.Failed)
+            {
+                _store.PruneOrphans(_history);
+            }
+
             _watcher = new ClipboardWatcher { Suspended = !settings.WatchClipboard };
             _watcher.Captured += OnCaptured;
         }
@@ -259,15 +267,52 @@ internal sealed class ClipboardService : IDisposable
         Changed?.Invoke();
     }
 
-    public void ClearAll()
+    /// <summary>
+    /// Drops every unpinned row and deletes its files. Asks first: this is the only action in
+    /// the app that destroys history on the spot, and the panel's 「清空历史」 label sits one
+    /// stray click away from the rows the user meant to click.
+    /// </summary>
+    public void ClearAll(IWin32Window? owner = null)
     {
+        var removable = _history.Items.Count(item => !item.Pinned);
+        if (removable == 0)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            owner,
+            $"将删除 {removable} 条未固定的记录，删除后无法恢复。" + Environment.NewLine
+                + "置顶的记录会保留。是否继续？",
+            "清空剪贴板历史",
+            MessageBoxButtons.OKCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.OK)
+        {
+            return;
+        }
+
+        var failed = 0;
         foreach (var item in _history.ClearUnpinned())
         {
-            _store.Delete(item);
+            failed += _store.Delete(item);
         }
 
         Persist();
         Changed?.Invoke();
+
+        if (failed > 0)
+        {
+            // Never report a clean sweep we did not achieve: a locked PNG is still on disk.
+            MessageBox.Show(
+                owner,
+                $"有 {failed} 个文件正在被占用，未能删除。" + Environment.NewLine
+                    + "它们不会丢失：下次启动时会被移到 clipboard\\orphan\\ 目录。",
+                "清空剪贴板历史",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
     }
 
     public void Dispose()
@@ -348,6 +393,13 @@ internal sealed class ClipboardService : IDisposable
 
     private void Persist()
     {
+        if (!_indexWritable)
+        {
+            // The index was never read successfully this session. Writing now would turn a read
+            // failure into a permanently empty history — exactly the chain that lost real data.
+            return;
+        }
+
         try
         {
             ClipboardIndex.Save(_store.IndexPath, _history);

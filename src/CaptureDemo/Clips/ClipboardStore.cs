@@ -96,68 +96,58 @@ internal sealed class ClipboardStore
         }
     }
 
-    public void Delete(ClipboardEntry entry)
-    {
-        TryDelete(entry.ImageFile);
-        TryDelete(entry.ThumbFile);
-    }
+    /// <summary>Deletes one entry's files.</summary>
+    /// <returns>How many files are still there because they were locked (0 means a clean delete).</returns>
+    public int Delete(ClipboardEntry entry) => TryDelete(entry.ImageFile) + TryDelete(entry.ThumbFile);
 
-    /// <summary>Removes PNGs that the index no longer references (crash leftovers).</summary>
-    public void PruneOrphans(ClipboardHistory history)
+    /// <summary>
+    /// Moves PNGs the index no longer references into <c>clipboard\orphan\</c>. Never deletes:
+    /// this used to call <c>File.Delete</c>, so the moment the index was written as an empty
+    /// array every PNG in the folder looked like an orphan and the user's whole screenshot
+    /// history was swept away. The guards and the decision live in
+    /// <see cref="ClipboardPruner"/>; this wrapper only absorbs IO failures, because failing
+    /// housekeeping must not break the clipboard itself.
+    /// </summary>
+    /// <returns>How many files were moved aside; 0 when the sweep was skipped.</returns>
+    public int PruneOrphans(ClipboardHistory history)
     {
         try
         {
-            if (!Directory.Exists(Folder))
-            {
-                return;
-            }
-
-            var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in history.Items)
-            {
-                if (!string.IsNullOrEmpty(entry.ImageFile))
-                {
-                    keep.Add(entry.ImageFile);
-                }
-
-                if (!string.IsNullOrEmpty(entry.ThumbFile))
-                {
-                    keep.Add(entry.ThumbFile);
-                }
-            }
-
-            foreach (var file in Directory.EnumerateFiles(Folder, "*.png"))
-            {
-                if (!keep.Contains(Path.GetFileName(file)))
-                {
-                    File.Delete(file);
-                }
-            }
+            return ClipboardPruner.Quarantine(history, Folder);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Housekeeping is best-effort.
+            return 0;
         }
     }
 
-    private void TryDelete(string? name)
+    /// <summary>
+    /// Deletes one file, reporting failure instead of hiding it: a caller that just told the
+    /// user "everything is gone" must not stay silent when a file was still locked.
+    /// </summary>
+    /// <returns>1 when the file is still there, 0 otherwise.</returns>
+    private int TryDelete(string? name)
     {
         if (string.IsNullOrEmpty(name))
         {
-            return;
+            return 0;
         }
 
         try
         {
             var path = Path.Combine(Folder, name);
-            if (File.Exists(path))
+            if (!File.Exists(path))
             {
-                File.Delete(path);
+                return 0;
             }
+
+            File.Delete(path);
+            return File.Exists(path) ? 1 : 0;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A locked file is not worth failing the whole operation.
+            // Locked by another process: the caller tells the user rather than pretending.
+            return 1;
         }
     }
 

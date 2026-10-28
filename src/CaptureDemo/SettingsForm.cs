@@ -1,7 +1,4 @@
 using CaptureDemo.Core;
-using CaptureDemo.Native;
-using CaptureDemo.Snip;
-using CaptureDemo.Ui;
 
 namespace CaptureDemo;
 

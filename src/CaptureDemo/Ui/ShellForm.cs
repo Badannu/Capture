@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace CaptureDemo.Ui;
 
 /// <summary>
@@ -59,14 +57,11 @@ internal class ShellForm : Form
     {
         try
         {
-            DwmSetWindowAttribute(handle, attribute, ref value, sizeof(int));
+            NativeMethods.DwmSetWindowAttribute(handle, attribute, ref value, sizeof(int));
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
             // Older Windows builds: keep the default frame.
         }
     }
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }

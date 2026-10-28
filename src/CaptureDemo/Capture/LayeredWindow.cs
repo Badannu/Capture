@@ -1,6 +1,5 @@
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
-using CaptureDemo.Native;
 
 namespace CaptureDemo.Capture;
 

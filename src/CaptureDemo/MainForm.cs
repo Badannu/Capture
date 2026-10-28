@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using CaptureDemo.Clips;
 using CaptureDemo.Core;
-using CaptureDemo.Native;
 using CaptureDemo.Snip;
 using CaptureDemo.Ui;
 
@@ -95,12 +94,10 @@ internal sealed class MainForm : ShellForm
         base.SetVisibleCore(value);
     }
 
-    protected override void OnShown(EventArgs e)
-    {
-        base.OnShown(e);
-        ShowInTaskbar = true;
-    }
-
+    // Note for whoever looks for an OnShown override: it used to set ShowInTaskbar back to
+    // true *after* the window had already become visible, which rebuilt the handle in full
+    // view. Nothing sets the flag to false before hiding any more without hiding first, so
+    // there is no second rebuild to undo — see HideToTray() for the full reasoning.
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
@@ -112,6 +109,9 @@ internal sealed class MainForm : ShellForm
 
         WindowAffinity.TryExcludeFromCapture(Handle);
         _hotkeyWindow = Handle;
+        // Reconcile the Run key once per launch: drops the pre-rename 1.4.x value, refreshes
+        // our path and honours the saved setting, so an upgrade never leaves a stale entry.
+        StartupRegistration.Sync(_settings.LaunchAtStartup);
         EnsureTray();
         RegisterHotkeys();
         ApplyHotkeyStatus();
@@ -563,6 +563,8 @@ internal sealed class MainForm : ShellForm
 
     private void ApplyHotkeyStatus(bool saved = false)
     {
+        NotifyHotkeyConflicts();
+
         if (_hotkeyProblems.Count == 0)
         {
             if (saved)
@@ -576,6 +578,55 @@ internal sealed class MainForm : ShellForm
         // Two names fit in the 432 px line; the rest collapse into a count, otherwise
         // AutoEllipsis would cut the second name in half.
         SetStatus((saved ? "设置已保存，但" : string.Empty) + HotkeyStatusText(), warning: true);
+    }
+
+    /// <summary>
+    /// Decides whether this exact set of broken hotkeys deserves a tray balloon, and
+    /// remembers the answer in the settings file.
+    /// <para>
+    /// The internal notice — status line plus the red badge behind each row of the
+    /// settings dialog — always shows the current truth; it costs the user nothing. The
+    /// balloon is different: a conflict usually comes from some program that is always
+    /// running, so popping it on every launch turns permanent noise into harassment.
+    /// It fires once per *change*: first run after installing, and again only when the
+    /// combination of problems is different from the one we last reported.
+    /// </para>
+    /// </summary>
+    private void NotifyHotkeyConflicts()
+    {
+        // The dev preview paints made-up conflicts so the row can be reviewed; it must not
+        // write anything into the user's settings file.
+        if (_preview)
+        {
+            return;
+        }
+
+        var current = HotkeyConflictFingerprint.Build(_hotkeyProblems);
+        if (string.Equals(current, _settings.HotkeyConflictNotice, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // Record it before speaking: if the file cannot be written, the user still gets
+        // this one popup, but never an endless one. And when the conflicts are gone the
+        // record empties too, so whatever breaks next counts as new instead of being
+        // silenced by something we no longer care about.
+        _settings.HotkeyConflictNotice = current;
+        try
+        {
+            _settings.Save(AppSettings.DefaultFilePath());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Read-only profile: keep this run's decision, lose it on the next launch.
+        }
+
+        if (current.Length == 0)
+        {
+            return;
+        }
+
+        _tray?.ShowBalloonTip(4200, AppInfo.Product, HotkeyStatusText(), ToolTipIcon.Warning);
     }
 
     private void UnregisterHotkeys()
@@ -669,10 +720,11 @@ internal sealed class MainForm : ShellForm
 
         // Any of the four failing means the window comes up: the status line at its bottom
         // is where the explanation lives, and a clipboard-only failure used to hide it.
+        // The balloon was already decided while registering (once per new conflict set) —
+        // doing it here as well would pop twice on the same launch.
         if (_hotkeyProblems.Count > 0)
         {
             ShowFromTray();
-            _tray?.ShowBalloonTip(4200, AppInfo.Product, HotkeyStatusText(), ToolTipIcon.Warning);
             return;
         }
 
@@ -789,8 +841,15 @@ internal sealed class MainForm : ShellForm
 
     private void HideToTray()
     {
-        ShowInTaskbar = false;
+        // Order matters and is measured, not assumed: assigning ShowInTaskbar swaps
+        // WS_EX_APPWINDOW, which rebuilds the window (the handle value changes). Doing it
+        // while the window is still visible puts its replacement on screen for one frame
+        // in system colours — the white flash on close-to-tray. Hiding first makes the
+        // rebuild invisible (IsWindowVisible = False on the new handle), so the taskbar
+        // button is still managed explicitly and never lingers on a shell that behaves
+        // differently from Windows' usual "hidden top-level windows have no button" rule.
         Hide();
+        ShowInTaskbar = false;
     }
 
     private void ShowFromTray()
@@ -800,6 +859,8 @@ internal sealed class MainForm : ShellForm
             return;
         }
 
+        // Same reasoning mirrored: restore the flag *before* the window becomes visible,
+        // so this rebuild happens out of sight too.
         ShowInTaskbar = true;
         Show();
         WindowState = FormWindowState.Normal;

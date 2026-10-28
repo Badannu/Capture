@@ -9,14 +9,15 @@ namespace CaptureDemo.Core;
 /// </summary>
 public static class AppInfo
 {
-    /// <summary>User-facing product name. Internal namespaces and the exe file name
-    /// stay CaptureDemo, so existing shortcuts and autostart entries keep working.</summary>
+    /// <summary>User-facing product name, also the exe name and the <c>%AppData%</c> folder.
+    /// Internal namespaces stay CaptureDemo, which keeps existing `using` lines and file
+    /// layout untouched; assembly name and namespace were never the same thing.</summary>
     public const string Product = "Capture";
 
     /// <summary>Marketing version, e.g. <c>1.2.0</c>. Never carries build metadata.</summary>
     public static string Version { get; } = Read();
 
-    /// <summary>Ready-to-render label, e.g. <c>CaptureDemo v1.2.0</c>.</summary>
+    /// <summary>Ready-to-render label, e.g. <c>Capture v1.5.0</c>.</summary>
     public static string Label => Product + " v" + Version;
 
     /// <summary>Feedback channel, Telegram handle. Rendered as "Tel: Guth_Lee".</summary>

@@ -1,6 +1,7 @@
+#if DEBUG
+// Compiled into Debug builds only; `--icons` is not parsed in a Release build.
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using CaptureDemo.Snip;
 
 namespace CaptureDemo.Dev;
 
@@ -222,3 +223,4 @@ internal static class IconSheet
         g.DrawString(text, font, brush, x, y);
     }
 }
+#endif

@@ -3,8 +3,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- RootNamespace stays CaptureDemo.Core: the source folders and `namespace`
+         declarations are untouched, only the shipped dll is renamed to Capture.Core.dll. -->
     <RootNamespace>CaptureDemo.Core</RootNamespace>
-    <AssemblyName>CaptureDemo.Core</AssemblyName>
-    <Description>Pure stitching logic for CaptureDemo. No Win32 and no UI Automation.</Description>
+    <AssemblyName>Capture.Core</AssemblyName>
+    <Product>Capture</Product>
+    <Description>Pure stitching and settings logic for Capture. No Win32 and no UI Automation.</Description>
   </PropertyGroup>
 </Project>

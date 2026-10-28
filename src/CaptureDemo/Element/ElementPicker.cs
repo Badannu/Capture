@@ -1,7 +1,6 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
-using CaptureDemo.Native;
 
 namespace CaptureDemo.Element;
 

@@ -31,7 +31,7 @@ CaptureSaver（按 AppSettings 写 PNG，可选剪贴板）
 | `src/CaptureDemo/LongShot` | 选区、连续自动滚动 / 手动接管、调用拼接器。 |
 | `src/CaptureDemo/Capture` | 屏幕裁切、BGRA 互转、保存、分层蒙版。 |
 | `src/CaptureDemo/Native` | 钩子、虚拟屏、`UpdateLayeredWindow`、`WDA_EXCLUDEFROMCAPTURE`、热键、窗口外框。 |
-| `src/CaptureDemo/MainForm.cs` | 主窗口、托盘、热键注册。设置对话框写 `%AppData%\CaptureDemo\settings.json`。关闭主窗口只是隐藏；托盘「退出」才卸热键并结束进程。 |
+| `src/CaptureDemo/MainForm.cs` | 主窗口、托盘、热键注册。设置对话框写 `%AppData%\Capture\settings.json`（便携版写 exe 同级；旧 `%AppData%\CaptureDemo\` 首次启动自动迁移）。关闭主窗口只是隐藏；托盘「退出」才卸热键并结束进程。 |
 
 ## 截图条
 

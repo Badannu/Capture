@@ -40,7 +40,7 @@ internal static class LaunchModeParser
         return LaunchMode.Menu;
     }
 
-    /// <summary>Dev hook: <c>--preview &lt;folder&gt;</c> renders contact sheets and exits.</summary>
+    /// <summary>Packaging self-check kept in Release: <c>--preview &lt;folder&gt;</c> renders and exits.</summary>
     public static string? PreviewFolder(string[] args)
     {
         for (var i = 0; i < args.Length; i++)
@@ -55,6 +55,7 @@ internal static class LaunchModeParser
         return null;
     }
 
+#if DEBUG
     /// <summary>Dev hook: <c>--ui-demo &lt;folder&gt;</c> renders the real forms and exits.</summary>
     public static string? UiDemoFolder(string[] args)
     {
@@ -69,6 +70,7 @@ internal static class LaunchModeParser
 
         return null;
     }
+#endif
 }
 
 internal static class Program
@@ -83,6 +85,10 @@ internal static class Program
             return;
         }
 
+#if DEBUG
+        // Developer-only entry points. A Release build does not compile these branches at all,
+        // so the arguments are silently ignored there and the app starts normally: no crash,
+        // no "unknown argument" dialog, no dev surface in the shipped exe.
         var demo = LaunchModeParser.UiDemoFolder(args);
         if (demo != null)
         {
@@ -104,6 +110,27 @@ internal static class Program
             Dev.AnnoBench.Run(args.Length > 1 ? args[1] : "bench.txt");
             return;
         }
+
+        // Bakes src/CaptureDemo/Assets/Capture.ico from the same tile the tray icon uses.
+        if (args.Length >= 2 && args[0].TrimStart('-', '/').Equals("make-icon", StringComparison.OrdinalIgnoreCase))
+        {
+            Dev.IconExport.Run(args[1]);
+            return;
+        }
+
+        if (args.Length >= 2 && args[0].TrimStart('-', '/').Equals("icon-sheet", StringComparison.OrdinalIgnoreCase))
+        {
+            Dev.IconExport.WriteSheets(args[1]);
+            return;
+        }
+
+        // Renders the committed .ico from its own bytes: packaging evidence, not a redraw.
+        if (args.Length >= 3 && args[0].TrimStart('-', '/').Equals("ico-check", StringComparison.OrdinalIgnoreCase))
+        {
+            Dev.IconExport.Check(args[1], args[2]);
+            return;
+        }
+#endif
 
         if (args.Length >= 8 && args[0].TrimStart('-', '/').Equals("crop", StringComparison.OrdinalIgnoreCase))
         {

@@ -1,5 +1,3 @@
-using CaptureDemo.Capture;
-
 namespace CaptureDemo.Element;
 
 /// <summary>

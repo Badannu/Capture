@@ -13,11 +13,11 @@ Windows 10 1809 以上 或 Windows 11，64 位。
 
 目录里有什么
 ------------
-CaptureDemo.exe                   程序入口
-CaptureDemo.dll                  主程序
-CaptureDemo.Core.dll             核心逻辑（拼接、设置、热键解析）
-CaptureDemo.deps.json            依赖清单，缺了会在启动时报找不到程序集
-CaptureDemo.runtimeconfig.json   运行时配置，缺了会提示要装运行时
+Capture.exe                      程序入口
+Capture.dll                      主程序
+Capture.Core.dll                 核心逻辑（拼接、设置、热键解析）
+Capture.deps.json                依赖清单，缺了会在启动时报找不到程序集
+Capture.runtimeconfig.json       运行时配置，缺了会提示要装运行时
 FlaUI.Core.dll / FlaUI.UIA3.dll  元素截图用的 UI Automation 封装
 Interop.UIAutomationClient.dll   上面两个的 COM 互操作
 System.*.dll                     FlaUI 与 GDI+ 依赖的微软组件
@@ -26,7 +26,7 @@ System.*.dll                     FlaUI 与 GDI+ 依赖的微软组件
 
 安装建议
 --------
-解压到 %LOCALAPPDATA%\Programs\Capture（或任意固定目录），再给 CaptureDemo.exe 建一个快捷方式。
+解压到 %LOCALAPPDATA%\Programs\Capture（或任意固定目录），再给 Capture.exe 建一个快捷方式。
 不要放在桌面或下载文件夹里长期运行——那两处容易被清理工具带走。
 
 运行后会自动生成
@@ -39,7 +39,7 @@ System.*.dll                     FlaUI 与 GDI+ 依赖的微软组件
 ----
 删掉程序文件夹，再删掉 %AppData%\Capture 即可。
 如果开过「开机自动启动」，先在设置里关掉，或删注册表 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-下的 CaptureDemo 值。
+下的 Capture 值。
 
 问题反馈
 --------

@@ -1,6 +1,4 @@
-using CaptureDemo.Capture;
 using CaptureDemo.Core;
-using CaptureDemo.Native;
 
 namespace CaptureDemo.Element;
 

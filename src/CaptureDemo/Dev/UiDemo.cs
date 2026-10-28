@@ -1,8 +1,10 @@
+#if DEBUG
+// Compiled into Debug builds only; `--ui-demo` is not parsed in a Release build, because the
+// shot list it can produce is a developer tool, not a feature.
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using CaptureDemo.Clips;
 using CaptureDemo.Core;
-using CaptureDemo.Snip;
 using CaptureDemo.Ui;
 
 namespace CaptureDemo.Dev;
@@ -411,3 +413,4 @@ internal static class UiDemo
         form.TopMost = topMost;
     }
 }
+#endif

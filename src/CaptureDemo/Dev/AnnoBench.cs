@@ -1,3 +1,6 @@
+#if DEBUG
+// Compiled into Debug builds only: the shipped exe must not carry a benchmark harness, and
+// `--bench` is not even parsed there (see Program.Main).
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -233,3 +236,4 @@ internal static class AnnoBench
         AnnoLayerForm.CapturableForDev = false;
     }
 }
+#endif

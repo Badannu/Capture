@@ -2,7 +2,23 @@
 
 Windows 10/11 上的轻量截图程序。热键唤起后整屏变暗（约 60% 黑），顶部正中是一条贴近系统截图工具的胶囊条。
 
-（程序名从 CaptureDemo 改为 Capture；源码命名空间、exe 文件名和 `%AppData%` 旧目录保持不变，所以已有的快捷方式和开机自启不会失效。旧 `%AppData%\CaptureDemo\settings.json` 会在首次启动新版本时自动迁移到 `%AppData%\Capture\settings.json`。）
+（v1.5.0 起产品名、exe 文件名、程序集名统一为 Capture；源码目录与命名空间仍是 `CaptureDemo`，两者本来解耦。老用户升级：旧 `%AppData%\CaptureDemo\settings.json` 会在首次启动时自动迁移到 `%AppData%\Capture\settings.json`，旧的开机自启项（`Run\CaptureDemo`）会被自动清掉并按你的设置重写成 `Run\Capture`。）
+
+## 下载
+
+从本仓库 Releases 页下载最新版本的两个包之一（**都要 x64 的 Windows 10 1809+ 或 Windows 11**），
+文件名里的版本号以 Releases 上的为准：
+
+| 包 | 大小 | 适合谁 |
+| --- | --- | --- |
+| `Capture-1.5.0-setup-win-x64.exe` | 46.50 MB | 大多数人。双击安装，默认只装给当前用户、不弹 UAC，开始菜单有入口，卸载在「应用和功能」里。安装后约 249 个文件 / 150.1 MB。 |
+| `Capture-1.5.0-portable-win-x64.zip` | 57.97 MB | 不想安装、或要放进 U 盘带着走。解压即用，自带 `portable.txt`，设置和历史写在 exe 旁边，删文件夹等于彻底卸载。解压后只有一个 66.5 MB 的 exe。 |
+
+- **不需要任何运行时**：两个包都自带 .NET 8 桌面运行时（self-contained），此外不需要 VC++ 运行库、WebView2 或额外字体。
+- **未做代码签名**，所以第一次运行 Windows SmartScreen 会拦一次：「更多信息 → 仍要运行」即可，
+  exe 和安装器各一次，之后不再提示。
+- 卸载**不会**删你的设置和剪贴板历史：卸载器只清掉开机自启项，并告诉你数据还留在哪个目录。
+- 完整依赖清单、写入位置、出包与验收步骤见 [PACKAGING.md](PACKAGING.md)。
 
 和 Windows 截图条的对应关系：
 
@@ -31,18 +47,19 @@ Windows 10/11 上的轻量截图程序。热键唤起后整屏变暗（约 60% �
 
 热键被别的软件占用、或两行写成同一个组合键时，**该行右侧出现红色圆圈感叹号**，点一下弹出说明（哪个组合键、和谁撞了、大概率是哪个程序的哪个功能）。Windows 不会告诉程序"谁占用了热键"，所以占用者是按常见默认快捷键 + 正在运行的进程推断的，措辞里写的是"大概率"。主窗口底部那一行提示只在真的有问题时才有内容。
 
-版本号只有一处定义：仓库根目录 `Directory.Build.props` 里的 `<Version>`。改那一个数字，exe 文件属性、设置页页脚、`CaptureDemo.exe --version` 三处同时跟着变。
+版本号只有一处定义：仓库根目录 `Directory.Build.props` 里的 `<Version>`。改那一个数字，exe 文件属性、设置页页脚、`Capture.exe --version` 三处同时跟着变。
 
 程序启动后停在托盘，不占任务栏。左键图标打开主窗口。右键菜单：打开主窗口、截图、长截图、元素截图、剪贴板、设置、退出。主窗口的关闭按钮默认只是回到托盘；在设置里关掉「关闭窗口后常驻托盘」之后，关窗口就是退出（热键会一并释放，方便让给别的软件）。只有「退出」会卸掉热键并结束进程。不做 OCR，也不上传。
 
 ## 环境
 
 - Windows 10（1809 及以上）或 Windows 11，**仅 64 位**
+- 安装版：不需要任何运行时，下载 setup.exe 双击安装（默认按当前用户装，不弹 UAC）
 - 便携版：不需要任何运行时，解压双击即用
-- 在线版（框架依赖）：安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)（x64）
+- 在线版（框架依赖，默认不发布）：安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)（x64）
 - 自行编译：安装 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 
-不需要 VC++ 运行库、WebView2 或额外字体，也不联网、不装服务。完整的依赖清单（每个 dll 干什么、程序会往哪写、两种包怎么对比）见 [PACKAGING.md](PACKAGING.md)。
+不需要 VC++ 运行库、WebView2 或额外字体，也不联网、不装服务。完整的依赖清单（每个 dll 干什么、程序会往哪写、三个包怎么对比）见 [PACKAGING.md](PACKAGING.md)。
 
 程序声明了 Per-Monitor V2 DPI。高分屏上 UIA 边界、鼠标坐标和 `CopyFromScreen` 使用同一套物理像素。
 
@@ -74,7 +91,7 @@ dotnet run --project src/CaptureDemo/CaptureDemo.csproj -- --long
 
 三个截图热键现在走的是同一个入口：都是先弹出胶囊条、把对应模式点亮，再由你框定区域。托盘菜单和主窗口上的「长截图」「元素截图」按钮也一样。
 
-查版本（也可以给 `publish\CaptureDemo.exe` 传 `--version`）：
+查版本（也可以给 `publish\Capture.exe` 传 `--version`）：
 
 ```powershell
 dotnet run --project src/CaptureDemo/CaptureDemo.csproj -- --version
@@ -85,10 +102,10 @@ dotnet run --project src/CaptureDemo/CaptureDemo.csproj -- --version
 仓库里已经带了一份编好的 **win-x64、框架依赖** 目录，目标机器装有 .NET 8 Desktop Runtime 即可运行：
 
 ```powershell
-.\publish\CaptureDemo.exe
-.\publish\CaptureDemo.exe --snip
-.\publish\CaptureDemo.exe --element
-.\publish\CaptureDemo.exe --long
+.\publish\Capture.exe
+.\publish\Capture.exe --snip
+.\publish\Capture.exe --element
+.\publish\Capture.exe --long
 ```
 
 重新发布（会覆盖 `publish/`）：
@@ -103,23 +120,32 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained
 ```
 
-`run-element.ps1` / `run-long.ps1` 会优先启动 `publish\CaptureDemo.exe`。
+`run-element.ps1` / `run-long.ps1` 会优先启动 `publish\Capture.exe`。
 
-## 对外分发：便携版 / 在线版
+## 对外分发：安装版 / 便携版 / 在线版
 
-`publish\` 是自用目录；要发给别人用 `pack.ps1`，它在 `dist\` 下产出两个 zip：
+`publish\` 是自用目录；要发给别人用 `pack.ps1`，它在 `dist\` 下产出：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pack.ps1
-#   Capture-<版本>-portable-win-x64.zip   60.7 MB  单个 exe，自带运行时，解压即用
-#   Capture-<版本>-online-win-x64.zip     1.0 MB   13 个文件，需 .NET 8 Desktop Runtime
+#   Capture-<版本>-setup-win-x64.exe      46.50 MB  Inno Setup 6 离线安装器（推荐主推）
+#   Capture-<版本>-portable-win-x64.zip   57.97 MB  单个 exe，自带运行时，解压即用
 ```
 
+默认**只出安装版 + 便携版**。在线版（框架依赖，`Capture-<版本>-online-win-x64.zip`，1.0 MB）
+**默认不产出**，要出必须显式加 `-OnlineOnly`——它要求机器上已经装了 .NET 8 Desktop Runtime，
+绝大多数下载者没有，结果是「下错版本 → 双击弹一个『需要安装 .NET』→ 打不开」，而且是这里
+最容易下错的那个包。如果你确定目标机器已经有运行时（或者你有配套的安装脚本），再显式要它。
+
+- **安装包**：per-user 免 UAC，安装位置可改，开始菜单 + 可选桌面快捷方式。**卸载只清开机自启项，
+  不删设置和剪贴板历史**，只会告诉你数据还在哪个目录。
 - **便携包**里多了 `portable.txt`：有它，`settings.json` 和剪贴板历史就写在 exe 旁边，删文件夹＝彻底卸载。
 - **在线包**适合已经在用 .NET 的机器，或者自己配了运行时安装脚本的场景。
-- 只想要其中一个：`-PortableOnly` / `-OnlineOnly`。
+- 只想要其中一个：`-SetupOnly` / `-PortableOnly` / `-NoSetup` / `-OnlineOnly`。
 
-细节（依赖清单、写入位置、验收清单、以后要做安装器的话怎么选）在 [PACKAGING.md](PACKAGING.md)。
+安装版和便携版可以同时运行：单实例判定按运行形态分成两套，互不干扰（热键仍会互相占用，属预期）。
+
+细节（依赖清单、写入位置、验收清单、安装器参数）在 [PACKAGING.md](PACKAGING.md)。
 
 ## 基本截图怎么用
 
@@ -206,11 +232,18 @@ dotnet test
 - 全屏只截鼠标下面那一台显示器，包含任务栏。要多屏各自截一次。
 - 任意形状保存的 PNG 在路径外是透明的。从标注条进入长截图时，用的是这个形状的外接矩形，不是镂空路径。
 - 标注画在已经截下的位图上，✓ 之前不会写文件。工具条本身用 `WDA_EXCLUDEFROMCAPTURE` 排除，不会进图。
-- 标注层只覆盖选区，鼠标移动时只重画笔尖划过的那一小块矩形，并按脏区提交。1080p 选区下画笔每帧约 0.25 ms、拖拽图形约 0.9 ms；同一张图走整幅重合成是 8–25 ms（视构建与选区大小），这也是之前拖动发涩的原因。可用 `CaptureDemo.exe --bench <报告.txt>` 复测，它会顺带写一张 `layer-shot.png` 作为标注层实机证据。
+- 标注层只覆盖选区，鼠标移动时只重画笔尖划过的那一小块矩形，并按脏区提交。1080p 选区下画笔每帧约 0.25 ms、拖拽图形约 0.9 ms；同一张图走整幅重合成是 8–25 ms（视构建与选区大小），这也是之前拖动发涩的原因。可用 Debug 构建的 `Capture.exe --bench <报告.txt>` 复测（该开关只在 Debug 编进去，Release 包里没有），它会顺带写一张 `layer-shot.png` 作为标注层实机证据。
 - 选择工具目前只做整条移动和整体缩放，不支持旋转、多选、层级调整（置顶/置底），也不支持对单条标注改色后保持其它属性不变。
 - 多显示器混用不同 DPI 时，极少数跨屏窗口的框可能偏几个像素。
 - 高度上限 20000 像素，帧数上限 150。超出后保存已经拼好的部分。
 - 剪贴板历史只认文本、图片和资源管理器复制的文件三项。富文本（HTML/RTF）只按纯文本记录；从 Office 复制的内容可能变成一段纯文字。历史上限 30 条，图片按 PNG 落盘，明文保存，不加密。
+- **索引读不出来的那一轮，新复制的条目不落盘**：`clipboard\index.json` 和它的备份 `index.bak.json`
+  都读不出来（被别的程序独占、或内容损坏）时，程序进入只读历史模式——这一轮新复制的东西只在
+  内存里可见，退出后不保留，也不做孤儿清扫；重启后若备份能读回来，历史和写入都会恢复。这条路径
+  很少走到，真走到时宁可不写，也不能用空数据覆盖掉一份本来完好的索引。
+- **安装版和便携版各有各的一套**：两者的单实例互斥体、唤醒消息和设置目录都按运行形态分开，
+  所以能同时跑，互不干扰（各自一份设置和历史）。但它们**共用同一组全局热键**——后启动的那份会
+  报「热键被占用」，属预期行为。
 - 进程空闲时不加载 OCR，也不保持捕获会话。元素模式结束时会释放 UI Automation 对象。
 
 ## 问题反馈
@@ -220,7 +253,7 @@ dotnet test
 
 设置页滚到底部也有这两行，点一下就把值复制到剪贴板。反馈时请带上：
 
-1. 版本号：`CaptureDemo.exe --version`（弹窗里有版本、保存目录、配置文件路径）；
+1. 版本号：`Capture.exe --version`（弹窗里有版本、保存目录、配置文件路径）；
 2. Windows 版本与显示缩放（例如「Win11 23H2 / 150%」）；
 3. 复现步骤——截图类问题最好附上原图或一段录屏，长截图问题说明选区里有没有框住固定标题栏/状态栏。
 

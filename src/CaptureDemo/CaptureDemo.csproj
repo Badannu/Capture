@@ -11,14 +11,22 @@
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
     <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
     <RollForward>Major</RollForward>
+    <!-- Namespace and assembly name are decoupled on purpose: the folders and every
+         `namespace CaptureDemo.*` declaration stay as they are, so this project keeps
+         compiling against the same type names while the exe becomes Capture.exe. -->
     <RootNamespace>CaptureDemo</RootNamespace>
-    <!-- The file name stays CaptureDemo.exe so existing shortcuts, autostart entries
-         and the publish scripts keep working; the shell-facing identity is Capture. -->
-    <AssemblyName>CaptureDemo</AssemblyName>
+    <AssemblyName>Capture</AssemblyName>
+    <!-- Shown in 属性 → 详细信息, in Task Manager and by the installer's wizard. -->
     <Product>Capture</Product>
     <AssemblyTitle>Capture</AssemblyTitle>
+    <Company>Capture contributors</Company>
     <!-- Version lives in Directory.Build.props so every project shares one number. -->
-    <Description>Windows screenshot tool: fullscreen, region, window, freeform, element, and scrolling capture.</Description>
+    <Description>Windows 截图与长截图工具</Description>
+    <!-- Static shell icon (Explorer, shortcuts, taskbar pinning). Baked from the same tile the
+         tray icon is drawn from, by Dev/IconExport.cs. The tray and window icons stay
+         runtime-drawn because they follow the theme. Regeneration command is documented at the
+         top of Dev/IconExport.cs (a Debug-only `make-icon` switch). -->
+    <ApplicationIcon>Assets\Capture.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <ItemGroup>

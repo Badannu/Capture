@@ -1,5 +1,4 @@
 using CaptureDemo.Core;
-using CaptureDemo.Native;
 
 namespace CaptureDemo.Clips;
 

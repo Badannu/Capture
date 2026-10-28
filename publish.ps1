@@ -18,4 +18,4 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "已输出到 $out\CaptureDemo.exe"
+Write-Host "已输出到 $out\Capture.exe"

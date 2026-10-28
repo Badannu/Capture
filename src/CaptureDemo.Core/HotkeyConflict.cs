@@ -192,6 +192,80 @@ public static class HotkeyAudit
 }
 
 /// <summary>
+/// Distills "which hotkeys are broken right now" into one stable string, so the host can
+/// answer "have I already told the user about this?" without asking again every launch.
+/// <para>
+/// A global hotkey conflict usually comes from another program that is always running,
+/// which makes it permanent: an unconditional popup would greet the user every single
+/// boot with news they already know. Comparing fingerprints turns that into "tell once,
+/// tell again only when the set of problems actually changes".
+/// </para>
+/// </summary>
+public static class HotkeyConflictFingerprint
+{
+    internal const char ItemSeparator = ';';
+
+    private const char FieldSeparator = '|';
+
+    /// <summary>
+    /// Builds the record for <paramref name="conflicts"/>. Empty string means "nothing
+    /// wrong", which is also the value a settings file predating this field carries.
+    /// <para>
+    /// Only the stable half of a conflict participates: the action name, the kind and
+    /// the canonical chord. The owner guess (<see cref="HotkeyConflict.Owner"/>,
+    /// <see cref="HotkeyConflict.Feature"/>, <see cref="HotkeyConflict.Note"/>) is left
+    /// out on purpose — it is inferred from running processes, so including it would make
+    /// the same conflict look new whenever WeChat happened to launch before us.
+    /// </para>
+    /// </summary>
+    public static string Build(IEnumerable<(string Action, HotkeyConflict Conflict)> conflicts)
+    {
+        var items = new List<string>();
+        foreach (var (action, conflict) in conflicts)
+        {
+            if (conflict is null || !conflict.IsConflict)
+            {
+                continue;
+            }
+
+            items.Add(string.Join(FieldSeparator, Trim(action), conflict.Kind, Canonical(conflict.Chord)));
+        }
+
+        if (items.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        // Sort so that "the same problems, discovered in a different order" compares equal.
+        items.Sort(StringComparer.Ordinal);
+        return string.Join(ItemSeparator, items);
+    }
+
+    /// <summary>
+    /// True when <paramref name="current"/> describes a conflict set the user has not been
+    /// told about yet. A null or empty <paramref name="recorded"/> means never notified,
+    /// which is also how an upgraded settings file looks.
+    /// </summary>
+    public static bool Changed(string? recorded, string current) =>
+        current.Length > 0 && !string.Equals(recorded ?? string.Empty, current, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Keeps a value read back from disk usable as a record: whitespace-free and never
+    /// null, even if someone hand-edited the file.
+    /// </summary>
+    public static string Record(string? value) => (value ?? string.Empty).Trim();
+
+    /// <summary>
+    /// "alt+ctrl+a" and "Ctrl+Alt+A" are the same conflict. Unparseable text keeps its
+    /// trimmed form so an invalid entry still differs from another invalid entry.
+    /// </summary>
+    private static string Canonical(string? chord) =>
+        HotkeyChord.TryParse(chord, out var parsed) ? parsed.Describe() : Trim(chord);
+
+    private static string Trim(string? text) => (text ?? string.Empty).Trim();
+}
+
+/// <summary>
 /// Default global shortcuts shipped by programs a Chinese desktop user is likely to run.
 /// Used only to turn "someone holds Shift+Alt+A" into "probably WeChat's screenshot".
 /// </summary>

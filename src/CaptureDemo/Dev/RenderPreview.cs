@@ -1,5 +1,4 @@
 using System.Drawing.Imaging;
-using CaptureDemo.Snip;
 
 namespace CaptureDemo.Dev;
 

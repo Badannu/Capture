@@ -1,6 +1,5 @@
 using System.Drawing.Imaging;
 using CaptureDemo.Core;
-using CaptureDemo.Element;
 
 namespace CaptureDemo.Snip;
 
@@ -16,7 +15,6 @@ internal sealed class SnipSession
     private ElementHover? _element;
     private readonly System.Windows.Forms.Timer _elementPump = new() { Interval = 70 };
     private Point _elementPoint;
-    private BgraBuffer? _base;
     private Point? _down;
     private readonly List<Point> _lasso = new();
     private SnipMode _mode = SnipMode.Rectangle;
@@ -279,7 +277,6 @@ internal sealed class SnipSession
 
         _selection = screen;
         _kind = kind;
-        _base = buffer;
         _ink = null;
         _selected = null;
         _dragHandle = AnnoHandle.None;
@@ -312,7 +309,6 @@ internal sealed class SnipSession
         _ink = null;
         _selected = null;
         _dragHandle = AnnoHandle.None;
-        _base = null;
         _anno?.CloseStylePopups();
         if (_layer is { Visible: true })
         {

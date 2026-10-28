@@ -1,8 +1,8 @@
-# 启动长截图。已发布时优先运行 publish\CaptureDemo.exe。
+# 启动长截图。已发布时优先运行 publish\Capture.exe。
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
-$exe = Join-Path $root "publish\CaptureDemo.exe"
+$exe = Join-Path $root "publish\Capture.exe"
 if (Test-Path $exe) {
     & $exe --long
     exit $LASTEXITCODE

@@ -4,6 +4,10 @@ obj/
 *.user
 TestResults/
 artifacts/
+# publish.ps1 刷新的开发自用目录，是构建产物，不进版本库
+publish/
+# 根目录若出现历史发行 zip，也不进版本库
+/*.zip
 # pack.ps1 产出的发行包，每次重新打包，不进版本库
 dist/
 # --ui-demo / --icons / --preview 的截图输出

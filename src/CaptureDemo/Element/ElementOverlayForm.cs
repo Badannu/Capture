@@ -1,5 +1,3 @@
-using CaptureDemo.Capture;
-
 namespace CaptureDemo.Element;
 
 internal sealed record ElementPick(Rectangle Bounds, string Label);

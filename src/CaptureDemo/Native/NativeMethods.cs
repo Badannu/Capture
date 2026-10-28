@@ -144,6 +144,25 @@ internal static class NativeMethods
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
 
+    /// <summary>
+    /// Used by <c>Ui.ShellForm</c> to paint the caption, corners and border in the app palette.
+    /// Any attribute the running build of Windows does not know is rejected with an error code,
+    /// which the caller swallows so older builds keep the default frame.
+    /// </summary>
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    /// <summary>
+    /// Registers a custom message id shared between processes; returns 0 on failure.
+    /// The name carries the run form (portable/installed) so a broadcast cannot reach
+    /// an instance of the other flavour.
+    /// </summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint RegisterWindowMessage(string message);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
     [DllImport("kernel32.dll")]
     public static extern uint GetCurrentThreadId();
 

@@ -1,7 +1,7 @@
 # Capture 交接文档
 
 > 交接日期：2026-10-28（Asia/Shanghai）  
-> 产品名（当前）：**Capture**（v1.4.4；内部命名空间与 exe 仍叫 CaptureDemo）  
+> 产品名（当前）：**Capture**（v1.5.0；exe / 程序集也叫 Capture，内部命名空间仍是 CaptureDemo）  
 > 目标读者：接手到 **本机 Cursor Agent** 继续开发的同事（或本机自己）  
 > 仓库形态：.NET 8 WinForms 绿色工程；云端曾在 Cursor Origin 草稿仓上迭代（agent `bc-f0195be6-8390-5a70-bca7-97bbb2557d95`），本 zip 以**当前可编译源码 + 预发布包**为准，不依赖云端仓是否已 publish。
 
@@ -51,7 +51,7 @@ CaptureDemo-handoff-YYYYMMDD/
   tests/
     CaptureDemo.Core.Tests/  ← 可在 Linux/macOS/Windows 跑的核心测试
   publish/                   ← 已编好的 win-x64 框架依赖发布目录
-    CaptureDemo.exe
+    Capture.exe
     *.dll / *.json
   CaptureDemo-win-x64.zip    ← 仅 publish/ 的压缩副本，便于只发运行包
   CaptureDemo-src.zip        ← 源码仓快照压缩副本（便于整包归档）
@@ -59,7 +59,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 > `pack.ps1` 产出的对外发行包在 `dist/`（已 gitignore，不进仓库）。
 
-**给本机 Agent 的最短路径：** 解压 → 用 Visual Studio / `dotnet` 打开 `CaptureDemo.sln` → 在 Windows 上 `dotnet run --project src/CaptureDemo` 或直接跑 `publish\CaptureDemo.exe`。
+**给本机 Agent 的最短路径：** 解压 → 用 Visual Studio / `dotnet` 打开 `CaptureDemo.sln` → 在 Windows 上 `dotnet run --project src/CaptureDemo` 或直接跑 `publish\Capture.exe`。
 
 ---
 
@@ -67,7 +67,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 | 场景 | 要求 |
 | --- | --- |
-| 跑 `publish\CaptureDemo.exe` | **Windows 10/11 x64** + [.NET 8 **Desktop** Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| 跑 `publish\Capture.exe` | **Windows 10/11 x64** + [.NET 8 **Desktop** Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
 | 跑便携版（`pack.ps1` 产物） | 只要 Windows 10 1809+ / 11 x64，**无需任何运行时** |
 | 改代码并编译 | 同上 OS + [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) |
 | 只跑核心单测 | 任意有 .NET 8 SDK 的机器（含 Linux CI）：`dotnet test` |
@@ -219,7 +219,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 ### 4.7.1 版本号
 
-只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.4.4</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.4.4`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
+只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.5.0</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.5.0`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。安装器版本号由 `pack.ps1` 通过 `/DMyAppVersion=` 注入，也不存第二份。
 
 ### 4.8 剪贴板历史
 
@@ -348,8 +348,8 @@ dotnet test
 9. 高 20000 / 帧 150 硬顶。  
 10. 剪贴板历史只认文本/图片/文件；富文本按纯文本记；明文落盘，最多 30 条。  
 11. UI 仍在成品化过程中：图标、间距、设置页布局可能还要按 Windows 截图继续磨。  
-12. 便携版要求目录可写；挪动目录后「开机自动启动」里的旧路径失效，重开一次开关即可。便携版与在线版共用同一个单实例互斥体，同一用户下别装两份。  
-13. 未做代码签名，首次运行会有 SmartScreen「未知发布者」提示（「更多信息 → 仍要运行」）。exe 名仍是 `CaptureDemo.exe`，改名会牵动互斥体名、Run 值名和所有脚本。
+12. 便携版要求目录可写；挪动目录后「开机自动启动」里的旧路径失效，重开一次开关即可。便携版与安装版可以同时运行（单实例互斥体按运行形态分成 `.portable.` / `.installed.` 两套），但全局热键仍是同一组，后来的那份会报占用。  
+13. 未做代码签名，首次运行会有 SmartScreen「未知发布者」提示（「更多信息 → 仍要运行」）。exe 名与程序集名自 1.5.0 起统一为 `Capture`，源码目录与命名空间仍是 `CaptureDemo`；再改名要同步 `AssemblyName`、`SingleInstance` 的互斥体名、`StartupRegistration` 的 Run 值名、`packaging\Capture.iss` 和所有脚本。
 
 ---
 
@@ -418,7 +418,7 @@ dotnet test
 6.2 标注条点「颜色」→ 选一个色 → **小组件不消失**，可连选；点画布任意处才收起，且那一下不落笔；Esc 第一下只关小组件。  
 7. 设置改热键/目录 → 退出再开仍在；无文字截断/重叠；四个下拉都有 chevron，开关与输入框左边缘对齐。  
 7.1 **设置页滚动**：窗口高度固定不随内容变；滚轮能滚（光标停在输入框上也要能滚）；拖右侧滑块、点轨道空白都能滚；Tab 一路按到底，焦点控件自动滚进视野。  
-7.2 **设置页末尾**：滚到底后「常规」卡片必须有完整圆角收尾（不能贴平/被按钮条压住），下方居中显示 `CaptureDemo vX.Y.Z`，版本号与源码 `Directory.Build.props` 一致。  
+7.2 **设置页末尾**：滚到底后「常规」卡片必须有完整圆角收尾（不能贴平/被按钮条压住），下方居中显示 `Capture vX.Y.Z`，版本号与源码 `Directory.Build.props` 一致。  
 8. 托盘右键：七项都有图标，右侧热键是灰色；「剪贴板」能开面板。  
 9. 剪贴板：复制图片/文本/文件各一条 → 双击文本回剪贴板、双击图片开「照片」→ 右键二级菜单项齐全 → 置顶后仍排首位。  
 10. **标注**：矩形选 800×600 以上的区域，用画笔快速划几下，笔迹要跟手、不掉帧、不断线；再拖一个椭圆和箭头，形状终点要严丝合缝跟着指针。  
@@ -426,8 +426,8 @@ dotnet test
 12. **标注**：点颜色换绿、点粗细换特粗，新画的线立即生效；选中已有标注再改色，改的是那一条。  
 13. **标注**：✓ 存出的 PNG 与屏幕上看到的一致（颜色、线宽、马赛克位置）。  
 14. `dotnet test` 全绿（当前 103 个，含版本号格式与来源校验、旧设置目录迁移、常驻开关默认值、胶囊放大与热点命中、状态栏读数变化、单帧卡住、白页位移窗口、热键冲突判定顺序与已知热键表）。  
-15. UI/标注改动后跑 `CaptureDemo.exe --ui-demo <folder>`，`main/settings/settings-*-bottom/clipboard/tray/clipmenu/capture-rectangle/capture-long/capture-element/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交；`scroll.txt` 会打出视口/内容/偏移量，可作为布局回归的硬指标。  
-16. 改渲染路径后跑 `CaptureDemo.exe --bench <报告.txt>`，确认画笔单帧仍在 1 ms 量级，并打开它顺带生成的 `layer-shot.png` 确认标注层真的显示在屏幕上。
+15. UI/标注改动后跑 Debug 构建的 `Capture.exe --ui-demo <folder>`（`dotnet run --project src\CaptureDemo -c Debug -- --ui-demo <folder>`；该开关只在 Debug 编译进去），`main/settings/settings-*-bottom/clipboard/tray/clipmenu/capture-rectangle/capture-long/capture-element/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交；`scroll.txt` 会打出视口/内容/偏移量，可作为布局回归的硬指标。  
+16. 改渲染路径后跑 Debug 构建的 `Capture.exe --bench <报告.txt>`（同样只在 Debug 有），确认画笔单帧仍在 1 ms 量级，并打开它顺带生成的 `layer-shot.png` 确认标注层真的显示在屏幕上。`--preview` / `--crop` 在 Release 里仍然保留，用于打包后的自检。
 17. **热键冲突**：开着微信（默认 `Alt+A` 截图）把某个热键改成 `Alt+A` → 该行右侧立刻出现红色圆圈感叹号；点开应显示「「Alt+A」已被占用 / 大概率是微信的「截图」（该程序正在运行）」；把微信的截图快捷键改掉再点感叹号应变成"查不到是谁"。把两行改成同一个键 → 两行都报"和「XX」重复"。
 18. **失败文案**：本机 `Ctrl+Alt+L` 被外部程序占着，启动后主窗口应自动弹出，底部一行红字点名"长截图 Ctrl+Alt+L 被占用"；把设置里的长截图改成别的键保存 → 红字消失并显示"设置已保存。"（旧版本这里会被"设置已保存。"顶掉，看不到警告）。
 

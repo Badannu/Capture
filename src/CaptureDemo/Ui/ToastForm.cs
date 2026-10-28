@@ -1,5 +1,3 @@
-using CaptureDemo.Capture;
-
 namespace CaptureDemo.Ui;
 
 internal sealed class ToastForm : Form

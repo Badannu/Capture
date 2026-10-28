@@ -81,7 +81,7 @@ internal static class AnnoPainter
                 return;
         }
 
-        var state = Begin(g, item.Width);
+        var state = Begin(g);
         try
         {
             using var pen = MakePen(item);
@@ -306,7 +306,7 @@ internal static class AnnoPainter
         return box;
     }
 
-    private static GraphicsState Begin(Graphics g, float width)
+    private static GraphicsState Begin(Graphics g)
     {
         var state = g.Save();
         g.SmoothingMode = SmoothingMode.AntiAlias;
