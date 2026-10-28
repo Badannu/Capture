@@ -126,8 +126,7 @@ internal static class Program
                 AppInfo.Label + Environment.NewLine +
                 "保存目录：" + AppSettings.DefaultDirectory() + Environment.NewLine +
                 "配置：" + AppSettings.DefaultFilePath() + Environment.NewLine + Environment.NewLine +
-                AppInfo.SupportCaption + Environment.NewLine +
-                "Telegram: " + AppInfo.ContactTelegram + Environment.NewLine +
+                "Tel: " + AppInfo.ContactTelegram + Environment.NewLine +
                 "Email: " + AppInfo.ContactEmail,
                 "关于",
                 MessageBoxButtons.OK,

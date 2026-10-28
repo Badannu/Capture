@@ -1,5 +1,6 @@
 using CaptureDemo.Core;
 using CaptureDemo.Native;
+using CaptureDemo.Snip;
 using CaptureDemo.Ui;
 
 namespace CaptureDemo;
@@ -133,12 +134,13 @@ internal sealed class SettingsForm : ShellForm
 
         // Feedback channels live directly under the version stamp: whoever scrolls to
         // the number is looking for "which build is this", and the next question is
-        // usually "how do I report a problem with it".
+        // usually "how do I report a problem with it". One line with glyphs instead of
+        // a caption and a list — two centred lines are enough, a third starts to read
+        // as a section of its own.
         var contact = new ContactBlock(
             DpiScale,
-            AppInfo.SupportCaption,
-            ("Telegram", AppInfo.ContactTelegram),
-            ("Email", AppInfo.ContactEmail));
+            ("Tel", AppInfo.ContactTelegram, SnipIcons.Send),
+            ("Email", AppInfo.ContactEmail, SnipIcons.Envelope));
         contact.SetBounds(left, top, cardWidth, contact.Height);
         sheet.Controls.Add(contact);
         _contact = contact;

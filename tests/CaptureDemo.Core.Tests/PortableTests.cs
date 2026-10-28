@@ -83,7 +83,6 @@ public class PortableTests
     {
         // The settings footer renders these verbatim and copies them to the clipboard,
         // so a stray space would break a mail client's "paste and send".
-        Assert.False(string.IsNullOrWhiteSpace(AppInfo.SupportCaption));
         Assert.False(string.IsNullOrWhiteSpace(AppInfo.ContactTelegram));
         Assert.DoesNotContain(" ", AppInfo.ContactTelegram);
         Assert.Equal(AppInfo.ContactEmail, AppInfo.ContactEmail.Trim());

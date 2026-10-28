@@ -142,6 +142,23 @@ internal static class SnipIcons
         "M3.6 7.4a2 2 0 0 1 2-2h3.3l2 2.4h7.5a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2z",
     };
 
+    // ── contact channels (settings footer) ─────────────────────────────────
+    /// <summary>
+    /// Paper plane. Authored as the outline plus one fold line: at 18 device pixels the
+    /// fold is what makes it read as "send" rather than as a generic arrow.
+    /// </summary>
+    private static readonly string[] SendPaths =
+    {
+        "M20.4 3.6 14.3 20.4 10.9 13.1 3.6 9.7z",
+        "M20.4 3.6 10.9 13.1",
+    };
+
+    private static readonly string[] EnvelopePaths =
+    {
+        "M4.5 5.9h15a1.5 1.5 0 0 1 1.5 1.5v9.2a1.5 1.5 0 0 1-1.5 1.5h-15a1.5 1.5 0 0 1-1.5-1.5V7.4a1.5 1.5 0 0 1 1.5-1.5z",
+        "M3.4 7.5 10.9 13.1a1.9 1.9 0 0 0 2.2 0l7.5-5.6",
+    };
+
     private static readonly string[] TrashPaths =
     {
         "M4.4 7h15.2",
@@ -240,6 +257,10 @@ internal static class SnipIcons
     public static void Clipboard(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, ClipboardPaths);
 
     public static void Copy(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, CopyPaths);
+
+    public static void Send(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, SendPaths);
+
+    public static void Envelope(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, EnvelopePaths);
 
     public static void Folder(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, FolderPaths);
 

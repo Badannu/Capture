@@ -1,7 +1,7 @@
 # Capture 交接文档
 
 > 交接日期：2026-10-28（Asia/Shanghai）  
-> 产品名（当前）：**Capture**（v1.4.2；内部命名空间与 exe 仍叫 CaptureDemo）  
+> 产品名（当前）：**Capture**（v1.4.3；内部命名空间与 exe 仍叫 CaptureDemo）  
 > 目标读者：接手到 **本机 Cursor Agent** 继续开发的同事（或本机自己）  
 > 仓库形态：.NET 8 WinForms 绿色工程；云端曾在 Cursor Origin 草稿仓上迭代（agent `bc-f0195be6-8390-5a70-bca7-97bbb2557d95`），本 zip 以**当前可编译源码 + 预发布包**为准，不依赖云端仓是否已 publish。
 
@@ -197,7 +197,7 @@ CaptureDemo-handoff-YYYYMMDD/
 - 滚轮走 `IMessageFilter` 提前拦截：单行 `TextBox` 会吞掉 `WM_MOUSEWHEEL`，否则光标停在输入框上时页面就滚不动了。
 - Tab 到视口外的控件会自动滚过去（`EnsureVisible` 递归挂 `Enter`）。
 - **版本号在滚动区最末尾**，贴底居中。加设置项只会让内容变长，不会再改窗口尺寸。
-- 版本号下面是**联系方式块**（`Ui/ContactBlock.cs`）：标题「联系我们：」+ `Telegram: Guth_Lee` / `Email: guthirelee@gmail.com` 两行。排法是**只对齐表头、整块按最长一行居中**——标题与两个行首共用一条左边缘，值紧跟各自冒号后一个空格（两行值的起始 x 不同，像句子不像表格）；块宽取最长那一行（邮箱行），整块以它居中，所以两边的空白相等，不会像「左边对齐版本号」那样整块视觉右移；默认字色与标题同为 `Theme.Muted`，只有鼠标压在某一行上（或刚复制过）值才变 `Theme.Accent`。量宽与绘制统一用 `TextFormatFlags.NoPadding`（`TextWidth()`），量到的就是真正落在屏幕上的字宽，冒号后才是精确一个空格，居中也是按像素而不是按估值。`--ui-demo` 的 `scroll.txt` 会多打一行 `contact: bounds=... groupLeft=... rowN: off=... val=...`，`--crop` 放大后可以用像素核对。它不是卡片——这里没有可操作项，用卡片会暗示一个不存在的控件。点某一行会把值写进剪贴板，行尾闪 1.6 秒「已复制」（`Clipboard` 被别人占用时静默放弃，不谎报成功）。内容常量在 `AppInfo.SupportCaption / ContactTelegram / ContactEmail`，`--version` 弹窗读的是同一份。
+- 版本号下面是**联系方式行**（`Ui/ContactBlock.cs`）：一行两段 `Tel: Guth_Lee` / `Email: guthirelee@gmail.com`，中间分号隔开，每段前面一个图标（纸飞机 `SnipIcons.Send`、信封 `SnipIcons.Envelope`，侧长 = `Body.Height × 0.86`，颜色与文字同为 `Theme.Muted`），没有标题，与版本号各占一行、各自居中。值紧跟冒号后一个空格——`ValueOffset` 取「整行宽 − 值宽」，量宽与绘制都带 `TextFormatFlags.NoPadding`，量到的就是落屏字宽，所以间距与居中都是像素级而不是估的。鼠标压在某一段上（或刚复制过）值才变 `Theme.Accent`，点一下复制该段的值，行尾 `+S(12)` 处闪 1.6 秒「已复制」（剪贴板被别人占用时静默放弃，不谎报成功）。`--ui-demo` 的 `scroll.txt` 会打一行 `contact: bounds/body/icon/left/total/每段 start+width`，`--crop` 放大即可用像素核对。它不是卡片——这里没有可操作项，用卡片会暗示一个不存在的控件。内容常量在 `AppInfo.ContactTelegram / ContactEmail`，`--version` 弹窗读的是同一份（`Tel:` / `Email:` 两行）。
 
 「关闭窗口后常驻托盘」默认开：关窗口只是回托盘，热键继续有效。关掉它之后，关窗口就是退出——`MainForm.OnFormClosing` 会 `AllowExit + BeginInvoke(ExitApp)`，把全局热键一并释放，方便让给别的软件，不会留下一个看不见却占着热键的进程。标签列宽 `S(136)` 是为了这行 9 个汉字不被折成两行。
 
@@ -208,7 +208,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 ### 4.7.1 版本号
 
-只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.4.2</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.4.2`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
+只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.4.3</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.4.3`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
 
 ### 4.8 剪贴板历史
 
