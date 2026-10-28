@@ -123,7 +123,12 @@ internal static class Program
             ApplicationConfiguration.Initialize();
             // WinExe has no console, so a dialog is the only way to answer on a double-click.
             MessageBox.Show(
-                AppInfo.Label + Environment.NewLine + "保存目录：" + AppSettings.DefaultDirectory(),
+                AppInfo.Label + Environment.NewLine +
+                "保存目录：" + AppSettings.DefaultDirectory() + Environment.NewLine +
+                "配置：" + AppSettings.DefaultFilePath() + Environment.NewLine + Environment.NewLine +
+                AppInfo.SupportCaption + Environment.NewLine +
+                "Telegram: " + AppInfo.ContactTelegram + Environment.NewLine +
+                "Email: " + AppInfo.ContactEmail,
                 "关于",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);

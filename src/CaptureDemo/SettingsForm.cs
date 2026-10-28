@@ -23,6 +23,7 @@ internal sealed class SettingsForm : ShellForm
     private readonly Picker _sample;
     private readonly Picker _appearance;
     private readonly ScrollSheet _scroll;
+    private readonly ContactBlock _contact;
 
     private SettingsForm(AppSettings settings)
     {
@@ -130,12 +131,26 @@ internal sealed class SettingsForm : ShellForm
         stamp.SetBounds(left, top, cardWidth, S(18));
         sheet.Controls.Add(stamp);
 
+        // Feedback channels live directly under the version stamp: whoever scrolls to
+        // the number is looking for "which build is this", and the next question is
+        // usually "how do I report a problem with it".
+        var contact = new ContactBlock(
+            DpiScale,
+            AppInfo.SupportCaption,
+            ("Telegram", AppInfo.ContactTelegram),
+            ("Email", AppInfo.ContactEmail));
+        contact.SetBounds(left, top, cardWidth, contact.Height);
+        sheet.Controls.Add(contact);
+        _contact = contact;
+
         // Sits at the very end of the sheet: readable only after scrolling, and it is
         // the natural place for the licence line and update notice later on.
         var viewport = ClientSize.Height - footer.Height;
-        var natural = top + stamp.Height + S(22);
+        var tail = stamp.Height + S(12) + contact.Height;
+        var natural = top + tail + S(22);
         var contentHeight = Math.Max(natural, viewport);
-        stamp.Top = contentHeight - S(22) - stamp.Height;
+        contact.Top = contentHeight - S(22) - contact.Height;
+        stamp.Top = contact.Top - S(12) - stamp.Height;
         _scroll.SetContentHeight(contentHeight);
 
         BuildFooter(footer);
@@ -163,6 +178,9 @@ internal sealed class SettingsForm : ShellForm
 
     /// <summary>Dev-only: parks the sheet at its end so the version stamp can be reviewed.</summary>
     internal void ScrollToEndForPreview() => _scroll.ScrollToEnd();
+
+    /// <summary>Dev-only: triggers the "copied" flash so its position can be reviewed.</summary>
+    internal void FlashContactCopyForPreview() => _contact.CopyRow(1);
 
     internal string DebugScroll() =>
         _scroll.Describe() + " | client=" + ClientSize +

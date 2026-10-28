@@ -50,6 +50,9 @@ internal static class UiDemo
                     Path.Combine(folder, "scroll.txt"),
                     $"settings-{tag}: {form.DebugScroll()}{Environment.NewLine}");
                 Save(form, Path.Combine(folder, $"settings-{tag}-bottom.png"));
+                form.FlashContactCopyForPreview();
+                Pump();
+                Save(form, Path.Combine(folder, $"settings-{tag}-contact.png"));
                 form.Hide();
             }
 

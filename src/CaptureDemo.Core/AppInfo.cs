@@ -19,6 +19,15 @@ public static class AppInfo
     /// <summary>Ready-to-render label, e.g. <c>CaptureDemo v1.2.0</c>.</summary>
     public static string Label => Product + " v" + Version;
 
+    /// <summary>Section caption above the contact rows in the settings footer.</summary>
+    public const string SupportCaption = "联系我们：";
+
+    /// <summary>Feedback channel, Telegram handle. Rendered as "Telegram: Guth_Lee".</summary>
+    public const string ContactTelegram = "Guth_Lee";
+
+    /// <summary>Feedback channel, e-mail address. Also copied on click in settings.</summary>
+    public const string ContactEmail = "guthirelee@gmail.com";
+
     private static string Read()
     {
         var assembly = typeof(AppInfo).Assembly;
