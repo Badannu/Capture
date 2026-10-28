@@ -47,7 +47,7 @@
         "runtime": {
           "lib/netcoreapp3.0/Interop.UIAutomationClient.dll": {
             "assemblyVersion": "10.0.19041.0",
-            "fileVersion": "0.0.0.0"
+            "fileVersion": "10.0.19041.0"
           }
         }
       },
@@ -74,10 +74,6 @@
       },
       "System.Diagnostics.EventLog/8.0.1": {
         "runtime": {
-          "runtimes/win/lib/net8.0/System.Diagnostics.EventLog.Messages.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.1024.46610"
-          },
           "runtimes/win/lib/net8.0/System.Diagnostics.EventLog.dll": {
             "assemblyVersion": "8.0.0.0",
             "fileVersion": "8.0.1024.46610"
