@@ -33,11 +33,17 @@ internal static class SnipIcons
         "M3 9h18",
     };
 
+    /// <summary>
+    /// Two stacked screens that read as "several screens stitched into one long
+    /// image". The old glyph — closed box, single centred stem, arrow crossbar —
+    /// was isomorphic with the Venus symbol, hence the ♀ misreading. Two wide
+    /// plates separated by a clear 4-unit seam are unmistakable at 26 px.
+    /// </summary>
     private static readonly string[] LongPaths =
     {
-        "M8.5 3.5h5A1.5 1.5 0 0 1 15 5v7.5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 7 12.5V5a1.5 1.5 0 0 1 1.5-1.5z",
-        "M11 15.4v5.4",
-        "M8.6 18.6 11 21l2.4-2.4",
+        "M4.8 3.4h14.4a1.4 1.4 0 0 1 1.4 1.4v3.8a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V4.8A1.4 1.4 0 0 1 4.8 3.4z",
+        "M4.8 14h14.4a1.4 1.4 0 0 1 1.4 1.4v3.8a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4v-3.8a1.4 1.4 0 0 1 1.4-1.4z",
+        "M8.6 6.7h6.8",
     };
 
     private static readonly string[] ElementPaths =
