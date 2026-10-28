@@ -18,12 +18,14 @@ internal sealed class ClipboardStore
     /// <summary>
     /// History sits next to the settings file, so the rename to Capture moved it too.
     /// Move the legacy folder across once instead of starting with an empty panel.
+    /// Portable builds skip this: moving the installed app's history into an unzipped
+    /// folder would empty the panel of the copy the user already runs.
     /// </summary>
     private static string DefaultFolder()
     {
         var current = Path.GetDirectoryName(AppSettings.DefaultFilePath()) ?? AppContext.BaseDirectory;
         var folder = Path.Combine(current, "clipboard");
-        if (Directory.Exists(folder))
+        if (Directory.Exists(folder) || AppSettings.IsPortable())
         {
             return folder;
         }

@@ -56,11 +56,37 @@ public sealed class AppSettings
 
     public static AppSettings CreateDefault() => new();
 
+    /// <summary>
+    /// Marker file that turns the folder the exe sits in into the config root. Shipped
+    /// inside the portable zip, so unzipping anywhere gives a self-contained install
+    /// that leaves no trace in <c>%AppData%</c> once the folder is deleted.
+    /// </summary>
+    public const string PortableMarker = "portable.txt";
+
+    /// <summary>True when the config root is the exe folder instead of <c>%AppData%</c>.</summary>
+    public static bool IsPortable() => IsPortable(AppContext.BaseDirectory);
+
+    /// <summary>Path-based overload so portable detection can be unit tested.</summary>
+    public static bool IsPortable(string baseDirectory) =>
+        !string.IsNullOrWhiteSpace(baseDirectory) &&
+        File.Exists(Path.Combine(baseDirectory, PortableMarker));
+
     public static string DefaultDirectory() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), AppInfo.Product);
 
+    /// <summary>
+    /// Settings live next to the exe in portable mode and under
+    /// <c>%AppData%\{Product}</c> otherwise. Every other path derives from this one,
+    /// so the clipboard cache follows the same rule without extra wiring.
+    /// </summary>
     public static string DefaultFilePath() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppInfo.Product, "settings.json");
+        SettingsFilePath(AppContext.BaseDirectory, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+
+    /// <summary>Pure form of <see cref="DefaultFilePath"/>, so both branches can be tested.</summary>
+    public static string SettingsFilePath(string baseDirectory, string appDataDirectory) =>
+        IsPortable(baseDirectory)
+            ? Path.Combine(baseDirectory, "settings.json")
+            : Path.Combine(appDataDirectory, AppInfo.Product, "settings.json");
 
     /// <summary>Pre-rename settings file. Read once so an upgrade keeps its hotkeys.</summary>
     public static string LegacyFilePath() =>
