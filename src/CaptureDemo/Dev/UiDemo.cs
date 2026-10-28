@@ -30,6 +30,9 @@ internal static class UiDemo
                 main.Show();
                 Pump();
                 Save(main, Path.Combine(folder, $"main-{tag}.png"));
+                main.ShowHotkeyProblemsForPreview();
+                Pump();
+                Save(main, Path.Combine(folder, $"main-{tag}-conflict.png"));
                 using (var tray = main.BuildTrayMenu())
                 {
                     SaveMenu(tray, main, Path.Combine(folder, $"tray-{tag}.png"));
@@ -44,17 +47,23 @@ internal static class UiDemo
                 form.Show();
                 Pump();
                 Save(form, Path.Combine(folder, $"settings-{tag}.png"));
+                var verdicts = form.DebugHotkeys();
+                form.ShowConflictsForPreview();
+                Pump();
+                Save(form, Path.Combine(folder, $"settings-{tag}-conflict.png"));
                 form.ScrollToEndForPreview();
                 Pump();
                 File.AppendAllText(
                     Path.Combine(folder, "scroll.txt"),
-                    $"settings-{tag}: {form.DebugScroll()}{Environment.NewLine}contact: {form.DebugContact()}{Environment.NewLine}");
+                    $"settings-{tag}: {form.DebugScroll()}{Environment.NewLine}contact: {form.DebugContact()}{Environment.NewLine}hotkeys: {verdicts}{Environment.NewLine}");
                 Save(form, Path.Combine(folder, $"settings-{tag}-bottom.png"));
                 form.FlashContactCopyForPreview();
                 Pump();
                 Save(form, Path.Combine(folder, $"settings-{tag}-contact.png"));
                 form.Hide();
             }
+
+            SaveConflictPopups(folder, tag);
 
             var store = new ClipboardStore(Path.Combine(Path.GetTempPath(), "capturedemo-ui-demo", tag));
             if (Directory.Exists(store.Folder))
@@ -100,6 +109,30 @@ internal static class UiDemo
     /// capture picked, element picked. The picked plate has to stay readable on a still
     /// frame, since it is no longer a momentary flash.
     /// </summary>
+    /// <summary>
+    /// The three verdicts the badge can show. Rendered at 150% because that is where the
+    /// body text wraps into three lines and the window height math has to hold up.
+    /// </summary>
+    private static void SaveConflictPopups(string folder, string tag)
+    {
+        var samples = new (string Name, HotkeyConflict Conflict)[]
+        {
+            ("taken", new HotkeyConflict(HotkeyConflictKind.Taken, "Ctrl+Alt+A", "微信", "截图")),
+            ("duplicate", new HotkeyConflict(HotkeyConflictKind.Duplicate, "Ctrl+Alt+S", "唤醒截图条")),
+            ("invalid", new HotkeyConflict(HotkeyConflictKind.Invalid, "Ctrl+Alt")),
+        };
+
+        foreach (var (name, conflict) in samples)
+        {
+            using var popup = ConflictPopup.CreateForPreview(conflict, 1.5f);
+            popup.Location = new Point(60, 60);
+            popup.Show();
+            Pump();
+            Save(popup, Path.Combine(folder, $"conflict-{name}-{tag}.png"));
+            popup.Hide();
+        }
+    }
+
     private static void SaveCaptureBar(string folder, string tag)
     {
         var work = Screen.FromPoint(Cursor.Position).WorkingArea;

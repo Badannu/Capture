@@ -302,6 +302,48 @@ public readonly record struct HotkeyChord(uint Modifiers, uint VirtualKey)
         return true;
     }
 
+    /// <summary>
+    /// Canonical spelling, so "alt+ctrl+a" and "Ctrl+Alt+A" are shown the same way.
+    /// Used for messages and for the known-shortcut table.
+    /// </summary>
+    public string Describe()
+    {
+        var parts = new List<string>(4);
+
+        // Win goes first: nobody writes "Shift+Win+S", and the known-shortcut table uses
+        // the same order, so the canonical form has to agree with it.
+        if ((Modifiers & ModWin) != 0)
+        {
+            parts.Add("Win");
+        }
+
+        if ((Modifiers & ModControl) != 0)
+        {
+            parts.Add("Ctrl");
+        }
+
+        if ((Modifiers & ModAlt) != 0)
+        {
+            parts.Add("Alt");
+        }
+
+        if ((Modifiers & ModShift) != 0)
+        {
+            parts.Add("Shift");
+        }
+
+        parts.Add(KeyLabel(VirtualKey));
+        return string.Join("+", parts);
+    }
+
+    private static string KeyLabel(uint vk) => vk switch
+    {
+        >= 'A' and <= 'Z' => ((char)vk).ToString(),
+        >= '0' and <= '9' => ((char)vk).ToString(),
+        >= 0x70 and <= 0x7B => "F" + (vk - 0x70 + 1),
+        _ => "?",
+    };
+
     private static bool TryKey(string token, out uint vk)
     {
         vk = 0;

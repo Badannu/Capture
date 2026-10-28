@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using CaptureDemo.Clips;
 using CaptureDemo.Core;
 using CaptureDemo.Native;
@@ -17,6 +18,10 @@ internal sealed class MainForm : ShellForm
     private readonly AppSettings _settings;
     private readonly ClipboardService _clipboard;
     private readonly bool _preview;
+    private readonly HotkeyAuditor _auditor = new();
+
+    /// <summary>Hotkeys Windows refused, with the row they belong to. Empty is the good case.</summary>
+    private readonly List<(string Action, HotkeyConflict Conflict)> _hotkeyProblems = new();
 
     private FlatButton? _start;
     private FlatButton? _long;
@@ -62,7 +67,7 @@ internal sealed class MainForm : ShellForm
         StartPosition = FormStartPosition.CenterScreen;
         DoubleBuffered = true;
         KeyPreview = true;
-        ClientSize = new Size(S(480), S(402));
+        ClientSize = new Size(S(480), S(410));
         BuildContent();
     }
 
@@ -109,6 +114,7 @@ internal sealed class MainForm : ShellForm
         _hotkeyWindow = Handle;
         EnsureTray();
         RegisterHotkeys();
+        ApplyHotkeyStatus();
         if (_autoStarted)
         {
             return;
@@ -144,6 +150,18 @@ internal sealed class MainForm : ShellForm
     {
         UnregisterHotkeys();
         base.OnHandleDestroyed(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // The auditor owns a message-only probe window; leaving it alive would keep a
+            // thread-less window handle around after the form is gone.
+            _auditor.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     protected override void WndProc(ref Message m)
@@ -258,6 +276,9 @@ internal sealed class MainForm : ShellForm
         _clipboardCard.Controls.Add(_clipboardDetail);
         _clipboardCard.Controls.Add(openClipboard);
 
+        // The status line sits below the buttons, hugging the bottom edge: between the
+        // clipboard card and the buttons it forced an uneven gap whenever it was empty,
+        // which is most of the time.
         _status = new Label
         {
             Text = "",
@@ -267,7 +288,7 @@ internal sealed class MainForm : ShellForm
             AutoEllipsis = true,
             AutoSize = false,
         };
-        _status.SetBounds(pad, S(316), width, S(20));
+        _status.SetBounds(pad, S(368), width, S(18));
         Controls.Add(_status);
 
         _settingsButton = new FlatButton
@@ -278,7 +299,7 @@ internal sealed class MainForm : ShellForm
             GlyphSize = S(16),
             CornerRadius = S(8),
         };
-        _settingsButton.SetBounds(pad, S(340), S(96), S(36));
+        _settingsButton.SetBounds(pad, S(324), S(96), S(36));
         _settingsButton.Clicked += (_, _) => EditSettings();
         Controls.Add(_settingsButton);
 
@@ -290,7 +311,8 @@ internal sealed class MainForm : ShellForm
             GlyphSize = S(16),
             CornerRadius = S(8),
         };
-        _folderButton.SetBounds(pad + S(104), S(340), S(152), S(36));        _folderButton.Clicked += (_, _) => OpenFolder();
+        _folderButton.SetBounds(pad + S(104), S(324), S(152), S(36));
+        _folderButton.Clicked += (_, _) => OpenFolder();
         Controls.Add(_folderButton);
 
         ResumeLayout();
@@ -366,6 +388,9 @@ internal sealed class MainForm : ShellForm
         BackColor = Theme.AppBack;
         ForeColor = Theme.Text;
         BuildContent();
+        // BuildContent recreates the label, so the hotkey verdict has to be written again
+        // or switching theme would silently drop the only notice that a hotkey is dead.
+        ApplyHotkeyStatus();
         SeedTray();
         if (IsHandleCreated)
         {
@@ -445,8 +470,19 @@ internal sealed class MainForm : ShellForm
     private void EditSettings()
     {
         var appearanceBefore = _settings.Appearance;
-        if (!SettingsForm.TryEdit(this, _settings))
+
+        // Let go of our own hotkeys while the dialog is open. Its probe asks Windows for
+        // the same chords; if we kept holding them, every row would accuse itself.
+        UnregisterHotkeys();
+
+        // TryEdit writes straight into _settings, so re-registering right after it reflects
+        // whatever was accepted — including the cancel path, where nothing changed.
+        var accepted = SettingsForm.TryEdit(this, _settings);
+        RegisterHotkeys();
+
+        if (!accepted)
         {
+            ApplyHotkeyStatus();
             return;
         }
 
@@ -456,46 +492,90 @@ internal sealed class MainForm : ShellForm
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SetStatus("设置没能写入：" + ex.Message);
+            SetStatus("设置没能写入：" + ex.Message, warning: true);
             return;
         }
 
         _clipboard.ApplySettings();
         StartupRegistration.Set(_settings.LaunchAtStartup);
-        RegisterHotkeys();
-        SetStatus("设置已保存。");
         if (!string.Equals(appearanceBefore, _settings.Appearance, StringComparison.Ordinal))
         {
             ApplyTheme();
         }
+
+        // The conflict verdict must win: "设置已保存。" used to overwrite it on the very
+        // next line, so a user who saved a clashing chord never learned it failed.
+        ApplyHotkeyStatus(saved: true);
     }
 
     private void RegisterHotkeys()
     {
         UnregisterHotkeys();
+        _hotkeyProblems.Clear();
         if (_hotkeyWindow == IntPtr.Zero)
         {
             return;
         }
 
-        _snipHotkey = TryRegister(HotkeySnip, _settings.AwakenHotkey);
-        _elementHotkey = TryRegister(HotkeyElement, _settings.ElementHotkey);
-        _longHotkey = TryRegister(HotkeyLong, _settings.LongHotkey);
-        _clipboardHotkey = TryRegister(HotkeyClipboard, _settings.ClipboardHotkey);
-        if (!_snipHotkey || !_elementHotkey || !_longHotkey || !_clipboardHotkey)
-        {
-            SetStatus("有全局热键没有注册成功（可能被别的程序占用）。");
-        }
+        _snipHotkey = Register(HotkeySnip, "唤醒截图条", _settings.AwakenHotkey);
+        _elementHotkey = Register(HotkeyElement, "元素截图", _settings.ElementHotkey);
+        _longHotkey = Register(HotkeyLong, "长截图", _settings.LongHotkey);
+        _clipboardHotkey = Register(HotkeyClipboard, "剪贴板历史", _settings.ClipboardHotkey);
     }
 
-    private bool TryRegister(int id, string text)
+    /// <summary>
+    /// Registers one hotkey and records *why* it failed. The old boolean-only version
+    /// could say nothing beyond "something did not register", which left the user with no
+    /// way to tell a typo from a program holding the chord.
+    /// </summary>
+    private bool Register(int id, string action, string text)
     {
         if (!HotkeyChord.TryParse(text, out var chord))
         {
+            _hotkeyProblems.Add((action, new HotkeyConflict(HotkeyConflictKind.Invalid, (text ?? string.Empty).Trim())));
             return false;
         }
 
-        return NativeMethods.RegisterHotKey(_hotkeyWindow, id, chord.Modifiers | NativeMethods.ModNoRepeat, chord.VirtualKey);
+        var ok = NativeMethods.RegisterHotKey(
+            _hotkeyWindow,
+            id,
+            chord.Modifiers | NativeMethods.ModNoRepeat,
+            chord.VirtualKey);
+        if (ok)
+        {
+            return true;
+        }
+
+        _hotkeyProblems.Add((action, _auditor.Explain(chord, Marshal.GetLastWin32Error())));
+        return false;
+    }
+
+    /// <summary>Writes the hotkey verdict into the status line, which sits at the window bottom.</summary>
+    /// <summary>Dev-only: paints representative hotkey failures so the bottom line can be reviewed.</summary>
+    internal void ShowHotkeyProblemsForPreview()
+    {
+        _hotkeyProblems.Clear();
+        _hotkeyProblems.Add(("长截图", new HotkeyConflict(HotkeyConflictKind.Taken, "Ctrl+Alt+A", "微信", "截图")));
+        _hotkeyProblems.Add(("元素截图", new HotkeyConflict(HotkeyConflictKind.Duplicate, "Ctrl+Alt+S", "唤醒截图条")));
+        ApplyHotkeyStatus();
+        Invalidate();
+    }
+
+    private void ApplyHotkeyStatus(bool saved = false)
+    {
+        if (_hotkeyProblems.Count == 0)
+        {
+            if (saved)
+            {
+                SetStatus("设置已保存。");
+            }
+
+            return;
+        }
+
+        // Two names fit in the 432 px line; the rest collapse into a count, otherwise
+        // AutoEllipsis would cut the second name in half.
+        SetStatus((saved ? "设置已保存，但" : string.Empty) + HotkeyStatusText(), warning: true);
     }
 
     private void UnregisterHotkeys()
@@ -587,14 +667,39 @@ internal sealed class MainForm : ShellForm
             return;
         }
 
-        if (!_snipHotkey || !_elementHotkey || !_longHotkey)
+        // Any of the four failing means the window comes up: the status line at its bottom
+        // is where the explanation lives, and a clipboard-only failure used to hide it.
+        if (_hotkeyProblems.Count > 0)
         {
             ShowFromTray();
+            _tray?.ShowBalloonTip(4200, AppInfo.Product, HotkeyStatusText(), ToolTipIcon.Warning);
             return;
         }
 
         HideToTray();
         _tray?.ShowBalloonTip(2600, AppInfo.Product, "已在托盘。左键打开主窗口，右键可用剪贴板、截图或退出。", ToolTipIcon.None);
+    }
+
+    /// <summary>
+    /// One line in a 432 px label. A single failure gets its reason spelled out; two get
+    /// bare names, because "被占用（疑似微信 截图）" twice overflows and AutoEllipsis would
+    /// cut the second name mid-word.
+    /// </summary>
+    private string HotkeyStatusText()
+    {
+        if (_hotkeyProblems.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var (action, conflict) = _hotkeyProblems[0];
+        if (_hotkeyProblems.Count == 1)
+        {
+            return conflict.Short(action);
+        }
+
+        var names = string.Join("、", _hotkeyProblems.Take(2).Select(p => $"{p.Action} {p.Conflict.Chord}"));
+        return $"{_hotkeyProblems.Count} 个快捷键没能注册：{names}" + (_hotkeyProblems.Count > 2 ? " 等" : string.Empty);
     }
 
     // ── tray ────────────────────────────────────────────────────────────────
@@ -717,11 +822,12 @@ internal sealed class MainForm : ShellForm
         Application.Exit();
     }
 
-    private void SetStatus(string message)
+    private void SetStatus(string message, bool warning = false)
     {
         if (!IsDisposed && _status != null)
         {
             _status.Text = message;
+            _status.ForeColor = warning ? Theme.Danger : Theme.Muted;
         }
     }
 

@@ -1,7 +1,7 @@
 # Capture 交接文档
 
 > 交接日期：2026-10-28（Asia/Shanghai）  
-> 产品名（当前）：**Capture**（v1.4.3；内部命名空间与 exe 仍叫 CaptureDemo）  
+> 产品名（当前）：**Capture**（v1.4.4；内部命名空间与 exe 仍叫 CaptureDemo）  
 > 目标读者：接手到 **本机 Cursor Agent** 继续开发的同事（或本机自己）  
 > 仓库形态：.NET 8 WinForms 绿色工程；云端曾在 Cursor Origin 草稿仓上迭代（agent `bc-f0195be6-8390-5a70-bca7-97bbb2557d95`），本 zip 以**当前可编译源码 + 预发布包**为准，不依赖云端仓是否已 publish。
 
@@ -111,6 +111,17 @@ CaptureDemo-handoff-YYYYMMDD/
 | `Ctrl+Alt+V` | 打开剪贴板历史面板 |
 | `Esc` | 取消当前覆盖层；长截图中 = 停止并 **保存已拼接部分** |
 
+**注册失败会当场说清楚**（v1.4.4 起）：
+
+- 四处注册（唤醒 / 元素 / 长截图 / 剪贴板）逐个记录失败原因，不再是一个笼统的布尔值。`RegisterHotKey` 返回 false 后立刻 `Marshal.GetLastWin32Error()`，`1409` 才是"被别人占了"，其它错误码照原样写进说明（`HotkeyConflict.Note`）。
+- **判定顺序在 `Core/HotkeyAudit.Check`**（纯函数，可单测）：解析失败 → `Invalid`；和对话框里另一行相同 → `Duplicate`（这一步不问系统，因为另一行还没保存，系统会说"空闲"）；`RegisterHotKey` 成功 → 正常；失败后 `Win+L`/`Win+D`/`Alt+F4` 这类系统键 → `Reserved`；命中 `KnownHotkeys` 表且对应进程正在跑 → `Taken` 并给出"大概率是微信的「截图」"。
+- **Windows 不提供"谁占用了热键"的接口**，`RegisterHotKey` 只回 1409。所以 `Taken` 的占用者是按常见默认快捷键猜的，界面措辞也写"大概率 / 查不到是谁"，不假装知道。
+- 设置页每行右侧**常驻一个徽标槽位**（宽 `S(18)`+`S(8)` 间隙，冲突与否都占位），有冲突才画红色圆圈感叹号；点它弹出 `Ui/ConflictPopup`（自绘小窗，点任意处/失焦/Esc 关闭）。槽位常驻是为了不让输入框在打字中途变宽变窄。
+- 打开设置前 `MainForm` 先 `UnregisterHotkeys()`、关掉后立刻重注册：否则对话框里的探测会撞到本程序自己持有的键，四行全部报冲突。
+- 主窗口那行提示从"剪贴板卡与按钮之间"**移到按钮下方贴窗口底**（客户区 402→410，按钮 y 340→324，状态行 y 368 高 18）。空着的时候不再把上下间距挤得不均。一个失败时点名带原因（`长截图 Ctrl+Alt+L 被占用`），两个以上换成"`2 个快捷键没能注册：长截图 Ctrl+Alt+A、元素截图 Ctrl+Alt+S`"——两个都带原因会撑爆 432 px 被 AutoEllipsis 截断。
+- 启动时只要**任意一个**失败就把主窗口拉出来（旧代码只查前三个，漏了剪贴板热键），并补一条托盘气泡。
+
+
 ### 4.3 顶部截图条（成品向）
 
 唤起后全屏约 **60% 压暗**（alpha≈153），顶中央 **胶囊条**（46px 高、40px 按钮、约 26px 图标、圆角、近黑半透明），尺度对齐 Windows 截图工具。36px 那版被反馈偏小，整条放大了一档；标注条仍是 36px（21 个格子）。
@@ -208,7 +219,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 ### 4.7.1 版本号
 
-只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.4.3</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.4.3`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
+只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.4.4</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.4.4`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
 
 ### 4.8 剪贴板历史
 
@@ -245,6 +256,7 @@ MainForm（热键、托盘、主壳）
 ScreenGrabber（CopyFromScreen）
 CaptureSaver（目录/模板/剪贴板）
 Native（钩子、分层窗、WDA_EXCLUDEFROMCAPTURE、热键、DWM bounds）
+Core HotkeyAudit + Native/HotkeyProbe（冲突判定顺序 + 消息专用窗探测）
 ```
 
 **分层原则：**
@@ -301,7 +313,7 @@ powershell -ExecutionPolicy Bypass -File .\run-long.ps1
 dotnet test
 ```
 
-当前 **87** 个单测（设置、热键解析、便携路径、标注几何与命中、剪贴板历史、拼接、WheelPace、PillMetrics 等）。**真实蒙版/钩子/滚轮必须在 Windows 手工验。**
+当前 **103** 个单测（设置、热键解析与冲突判定、便携路径、标注几何与命中、剪贴板历史、拼接、WheelPace、PillMetrics 等）。**真实蒙版/钩子/滚轮必须在 Windows 手工验。**
 
 `pack.ps1` 是 UTF-8 **带 BOM** 保存的：Windows PowerShell 5.1 按 ANSI 读无 BOM 脚本，字符串里的中文会把引号吞掉，直接语法报错。改这个脚本时别把 BOM 弄丢。
 
@@ -379,6 +391,8 @@ dotnet test
 
 已完成（设置页收尾这一轮）：窗口固定高度 + `ScrollSheet` 自绘滚动（滚轮 / 拖滑块 / 点轨道 / Tab 跟随）、页脚版本号（`Directory.Build.props` 单一来源）、`--version`、页脚细分隔线。顺带修掉 `Dock Fill+Bottom` 顺序与 `Controls.Add` Z 序两个布局 bug——前者正是「常规」卡片底部没圆角收尾的真正原因。
 
+已完成（热键冲突检测这一轮）：逐个热键记录失败原因 + `ERROR_HOTKEY_ALREADY_REGISTERED` 判定、设置页红色感叹号与说明弹层、已知热键表（微信/QQ/钉钉/企业微信/飞书/Snipaste/PowerToys/NVIDIA/Bandicam）+ 运行中进程过滤、主窗口状态行移到底部并点名失败项、修掉"设置已保存。"覆盖警告、启动判据补上剪贴板热键并加托盘气泡。
+
 仍未做：
 
 1. 采集后端评估（WGC / `PrintWindow(PW_RENDERFULLCONTENT)` 抓被遮挡窗口，失败回退 GDI）。  
@@ -411,9 +425,11 @@ dotnet test
 11. **标注**：切到选择工具，单击任一标注出现虚线框 + 八个手柄；拖动移动、拖角缩放都跟手；按撤销删掉这一条。  
 12. **标注**：点颜色换绿、点粗细换特粗，新画的线立即生效；选中已有标注再改色，改的是那一条。  
 13. **标注**：✓ 存出的 PNG 与屏幕上看到的一致（颜色、线宽、马赛克位置）。  
-14. `dotnet test` 全绿（当前 82 个，含版本号格式与来源校验、旧设置目录迁移、常驻开关默认值、胶囊放大与热点命中、状态栏读数变化、单帧卡住、白页位移窗口）。  
+14. `dotnet test` 全绿（当前 103 个，含版本号格式与来源校验、旧设置目录迁移、常驻开关默认值、胶囊放大与热点命中、状态栏读数变化、单帧卡住、白页位移窗口、热键冲突判定顺序与已知热键表）。  
 15. UI/标注改动后跑 `CaptureDemo.exe --ui-demo <folder>`，`main/settings/settings-*-bottom/clipboard/tray/clipmenu/capture-rectangle/capture-long/capture-element/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交；`scroll.txt` 会打出视口/内容/偏移量，可作为布局回归的硬指标。  
 16. 改渲染路径后跑 `CaptureDemo.exe --bench <报告.txt>`，确认画笔单帧仍在 1 ms 量级，并打开它顺带生成的 `layer-shot.png` 确认标注层真的显示在屏幕上。
+17. **热键冲突**：开着微信（默认 `Alt+A` 截图）把某个热键改成 `Alt+A` → 该行右侧立刻出现红色圆圈感叹号；点开应显示「「Alt+A」已被占用 / 大概率是微信的「截图」（该程序正在运行）」；把微信的截图快捷键改掉再点感叹号应变成"查不到是谁"。把两行改成同一个键 → 两行都报"和「XX」重复"。
+18. **失败文案**：本机 `Ctrl+Alt+L` 被外部程序占着，启动后主窗口应自动弹出，底部一行红字点名"长截图 Ctrl+Alt+L 被占用"；把设置里的长截图改成别的键保存 → 红字消失并显示"设置已保存。"（旧版本这里会被"设置已保存。"顶掉，看不到警告）。
 
 ---
 

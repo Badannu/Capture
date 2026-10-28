@@ -13,6 +13,11 @@ internal sealed class SettingsForm : ShellForm
     private readonly FieldBox _element;
     private readonly FieldBox _long;
     private readonly FieldBox _clipboard;
+    private readonly ConflictBadge _awakenBadge;
+    private readonly ConflictBadge _elementBadge;
+    private readonly ConflictBadge _longBadge;
+    private readonly ConflictBadge _clipboardBadge;
+    private readonly HotkeyAuditor _auditor = new();
     private readonly FieldBox _directory;
     private readonly FieldBox _pattern;
     private readonly ToggleSwitch _copyToClipboard;
@@ -66,6 +71,10 @@ internal sealed class SettingsForm : ShellForm
         _element = HotkeyBox(settings.ElementHotkey);
         _long = HotkeyBox(settings.LongHotkey);
         _clipboard = HotkeyBox(settings.ClipboardHotkey);
+        _awakenBadge = Badge();
+        _elementBadge = Badge();
+        _longBadge = Badge();
+        _clipboardBadge = Badge();
         _directory = Field(settings.SaveDirectory, $@"留空则用 图片\{AppInfo.Product}");
         _pattern = Field(settings.FilenamePattern);
         _copyToClipboard = Toggle(settings.CopyToClipboard);
@@ -88,10 +97,10 @@ internal sealed class SettingsForm : ShellForm
 
         top = AddCard(sheet, "快捷键", top, left, cardWidth, new (string, Control)[]
         {
-            ("唤醒截图条", _awaken),
-            ("元素截图", _element),
-            ("长截图", _long),
-            ("剪贴板历史", _clipboard),
+            ("唤醒截图条", HotkeyRow(_awaken, _awakenBadge)),
+            ("元素截图", HotkeyRow(_element, _elementBadge)),
+            ("长截图", HotkeyRow(_long, _longBadge)),
+            ("剪贴板历史", HotkeyRow(_clipboard, _clipboardBadge)),
         });
 
         top = AddCard(sheet, "保存", top, left, cardWidth, new (string, Control)[]
@@ -169,11 +178,30 @@ internal sealed class SettingsForm : ShellForm
 
         Shown += (_, _) =>
         {
+            // Audited once the window is up: the probe registers and releases a chord,
+            // and doing that before the message loop runs would report nonsense.
+            AuditHotkeys();
             _awaken.Inner.Focus();
             _awaken.Inner.SelectionLength = 0;
         };
 
+        foreach (var box in new[] { _awaken, _element, _long, _clipboard })
+        {
+            // Live: typing a chord should show its verdict without a Save round-trip.
+            box.TextChanged += (_, _) => AuditHotkeys();
+        }
+
         KeyPreview = true;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _auditor.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     public static SettingsForm CreateForPreview(AppSettings settings) => new(settings);
@@ -424,6 +452,77 @@ internal sealed class SettingsForm : ShellForm
         var picker = new Picker();
         picker.SetItems(items, Math.Clamp(selected, 0, items.Length - 1));
         return picker;
+    }
+
+    private ConflictBadge Badge()
+    {
+        var badge = new ConflictBadge(DpiScale);
+        badge.Click += (_, _) =>
+        {
+            if (badge.Conflict is { } conflict)
+            {
+                ConflictPopup.Open(badge, conflict);
+            }
+        };
+        return badge;
+    }
+
+    /// <summary>
+    /// Field plus its permanent badge slot. The slot keeps its width even while the badge
+    /// is hidden, otherwise a conflict appearing mid-typing would shrink the text box
+    /// under the caret and shift the whole row.
+    /// </summary>
+    private Control HotkeyRow(FieldBox box, ConflictBadge badge)
+    {
+        var panel = new Panel { BackColor = Theme.Card };
+        panel.Controls.Add(box);
+        panel.Controls.Add(badge);
+        panel.Resize += (_, _) =>
+        {
+            var gap = S(8);
+            var slot = Math.Max(badge.Width, S(18));
+            var boxWidth = Math.Max(S(80), panel.Width - slot - gap);
+            box.SetBounds(0, 0, boxWidth, panel.Height);
+            badge.SetBounds(
+                panel.Width - slot,
+                Math.Max(0, (panel.Height - badge.Height) / 2),
+                slot,
+                badge.Height);
+        };
+        return panel;
+    }
+
+    /// <summary>One row set, in screen order, shared by the audit of every box.</summary>
+    private (string Action, string Text)[] HotkeyRows() => new[]
+    {
+        ("唤醒截图条", _awaken.Text.Trim()),
+        ("元素截图", _element.Text.Trim()),
+        ("长截图", _long.Text.Trim()),
+        ("剪贴板历史", _clipboard.Text.Trim()),
+    };
+
+    private void AuditHotkeys()
+    {
+        // Every row is re-checked when any of them changes: a duplicate is a property of
+        // the pair, so editing one box can clear or create the badge on another.
+        var rows = HotkeyRows();
+        _awakenBadge.SetConflict(_auditor.Check(rows[0].Text, rows[0].Action, rows));
+        _elementBadge.SetConflict(_auditor.Check(rows[1].Text, rows[1].Action, rows));
+        _longBadge.SetConflict(_auditor.Check(rows[2].Text, rows[2].Action, rows));
+        _clipboardBadge.SetConflict(_auditor.Check(rows[3].Text, rows[3].Action, rows));
+    }
+
+    /// <summary>Dev-only: per-row verdicts, so --ui-demo output can be checked against reality.</summary>
+    internal string DebugHotkeys() => string.Join(
+        " | ",
+        new[] { _awakenBadge, _elementBadge, _longBadge, _clipboardBadge }
+            .Select(b => b.Conflict is { } c ? $"{c.Kind}/{c.Chord}/{c.Owner}/{c.Note}" : "ok"));
+
+    /// <summary>Dev-only: paints two representative conflicts for --ui-demo screenshots.</summary>
+    internal void ShowConflictsForPreview()
+    {
+        _longBadge.SetConflict(new HotkeyConflict(HotkeyConflictKind.Taken, "Ctrl+Alt+A", "微信", "截图"));
+        _clipboardBadge.SetConflict(new HotkeyConflict(HotkeyConflictKind.Duplicate, "Ctrl+Alt+S", "唤醒截图条"));
     }
 
     private FieldBox HotkeyBox(string text)
