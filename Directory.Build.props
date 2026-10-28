@@ -5,7 +5,7 @@
     语义化版本：主版本.次版本.修订号。新增功能 +1 次版本，只修 bug +1 修订号。
   -->
   <PropertyGroup>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <Product>CaptureDemo</Product>
   </PropertyGroup>
 </Project>

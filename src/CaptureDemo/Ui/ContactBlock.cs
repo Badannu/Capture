@@ -17,7 +17,7 @@ internal sealed class ContactBlock : Control
 {
     private const int BasePadTop = 2;
     private const int BaseCaptionHeight = 18;
-    private const int BaseGap = 6;
+    private const int BaseCaptionGap = 6;
     private const int BaseRowHeight = 24;
 
     private readonly float _scale;
@@ -42,7 +42,7 @@ internal sealed class ContactBlock : Control
             true);
         BackColor = Theme.AppBack;
         TabStop = false;
-        Height = S(BasePadTop + BaseCaptionHeight + BaseGap + (rows.Length * BaseRowHeight));
+        Height = S(BasePadTop + BaseCaptionHeight + BaseCaptionGap + (rows.Length * BaseRowHeight));
 
         _flash = new System.Windows.Forms.Timer { Interval = 1600 };
         _flash.Tick += (_, _) =>
@@ -69,17 +69,21 @@ internal sealed class ContactBlock : Control
             Theme.Muted,
             LineFlags);
 
-        // One label column width for the whole block: values that start at different x
-        // read as two unrelated lines instead of one list of channels.
-        var column = LabelColumn();
+        // Caption and labels share one left edge; each value starts right after its own
+        // colon, so the two rows read as prose rather than as a two-column table.
         for (var i = 0; i < _rows.Length; i++)
         {
             var top = RowTop(i);
-            var row = RowBounds(i);
             var label = LabelText(i);
-            TextRenderer.DrawText(g, label, UiFonts.Body, row, Theme.Muted, LineFlags);
+            TextRenderer.DrawText(
+                g,
+                label,
+                UiFonts.Body,
+                new Rectangle(left, top, Math.Max(0, Width - left - S(2)), S(BaseRowHeight)),
+                Theme.Muted,
+                LineFlags);
 
-            var valueLeft = left + column + S(BaseGap);
+            var valueLeft = left + ValueOffset(i);
             var valueWidth = TextRenderer.MeasureText(_rows[i].Value, UiFonts.Body).Width;
             var valueRect = new Rectangle(valueLeft, top, valueWidth, S(BaseRowHeight));
             TextRenderer.DrawText(
@@ -87,7 +91,7 @@ internal sealed class ContactBlock : Control
                 _rows[i].Value,
                 UiFonts.Body,
                 valueRect,
-                _hot == i || _copied == i ? Theme.Accent : Theme.Text,
+                _hot == i || _copied == i ? Theme.Accent : Theme.Muted,
                 LineFlags);
 
             if (_copied == i)
@@ -189,35 +193,38 @@ internal sealed class ContactBlock : Control
     private int GroupLeft()
     {
         var width = TextRenderer.MeasureText(_caption, UiFonts.Section).Width;
-        var column = LabelColumn();
         for (var i = 0; i < _rows.Length; i++)
         {
-            width = Math.Max(width, column + S(BaseGap) + TextRenderer.MeasureText(_rows[i].Value, UiFonts.Body).Width);
+            width = Math.Max(width, ValueOffset(i) + TextRenderer.MeasureText(_rows[i].Value, UiFonts.Body).Width);
         }
 
         return Math.Max(S(2), (Width - width) / 2);
     }
 
-    private int LabelColumn()
+    /// <summary>
+    /// Distance from the block's left edge to the value: the label plus one space.
+    /// <para>
+    /// Measuring the label alone would add TextRenderer's ~3px padding on both the label
+    /// and the value rect, leaving a gap that reads as two spaces. Measuring the full line
+    /// and subtracting the value cancels that padding on both sides.
+    /// </para>
+    /// </summary>
+    private int ValueOffset(int index)
     {
-        var width = 0;
-        for (var i = 0; i < _rows.Length; i++)
-        {
-            width = Math.Max(width, TextRenderer.MeasureText(LabelText(i), UiFonts.Body).Width);
-        }
-
-        return width;
+        var value = _rows[index].Value;
+        return TextRenderer.MeasureText(LabelText(index) + " " + value, UiFonts.Body).Width -
+            TextRenderer.MeasureText(value, UiFonts.Body).Width;
     }
 
     private string LabelText(int index) => _rows[index].Label + ":";
 
     private int RowTop(int index) =>
-        S(BasePadTop + BaseCaptionHeight + BaseGap) + (index * S(BaseRowHeight));
+        S(BasePadTop + BaseCaptionHeight + BaseCaptionGap) + (index * S(BaseRowHeight));
 
     /// <summary>Hit area covers the text only, so a hand cursor never appears over empty space.</summary>
     private Rectangle RowBounds(int index)
     {
-        var width = LabelColumn() + S(BaseGap) + TextRenderer.MeasureText(_rows[index].Value, UiFonts.Body).Width;
+        var width = ValueOffset(index) + TextRenderer.MeasureText(_rows[index].Value, UiFonts.Body).Width;
         return new Rectangle(GroupLeft(), RowTop(index), width, S(BaseRowHeight));
     }
 
