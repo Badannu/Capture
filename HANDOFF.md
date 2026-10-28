@@ -167,7 +167,24 @@ CaptureDemo-handoff-YYYYMMDD/
 
 分组：快捷键 / 保存 / 剪贴板 / 长截图 / 常规。  
 要求：无大段说明废话、标签不截断、「浏览…」完整；勿再出现文字重叠绘制 bug。  
-实现：`ShellForm` + 可滚 `BufferedPanel` + `CardPanel` 卡片；下拉是自绘 `Picker`（原生 `ComboBox` 的 3D 箭头和卡片风格不搭）；开关是 `ToggleSwitch`，**与输入框同为左对齐**（曾被居中放在编辑列，读起来像错位）；窗口高度按内容自动算，并在超出工作区时退化为滚动。
+实现：`ShellForm` + `ScrollSheet` + `CardPanel` 卡片；下拉是自绘 `Picker`（原生 `ComboBox` 的 3D 箭头和卡片风格不搭）；开关是 `ToggleSwitch`，**与输入框同为左对齐**（曾被居中放在编辑列，读起来像错位）。
+
+**窗口高度固定**（`S(672)`，小屏时收敛到工作区），内容超长时由 `Ui/ScrollSheet` 滚动：
+
+- 内容放在内层 `Panel` 上，滚动只平移这一个面板（`Top = -offset`），卡片不重排，每帧一次 `SetWindowPos` + 滑块重绘。
+- 滚动条是自绘的 8dip 圆角滑块，不用原生条：17px 的系统灰贴在圆角卡片旁边像补丁，而且无法跟随深色主题。
+- 滚轮走 `IMessageFilter` 提前拦截：单行 `TextBox` 会吞掉 `WM_MOUSEWHEEL`，否则光标停在输入框上时页面就滚不动了。
+- Tab 到视口外的控件会自动滚过去（`EnsureVisible` 递归挂 `Enter`）。
+- **版本号在滚动区最末尾**，贴底居中。加设置项只会让内容变长，不会再改窗口尺寸。
+
+两个踩过的布局坑，改这块前先读：
+
+1. `Dock=Fill` + `Dock=Bottom` 混用时，Fill 会先占满整个客户区，Bottom 只是盖在上面——内容被按钮条实心遮挡，看着像「卡片底部被切」。改成显式 `SetBounds` 堆叠。
+2. `Controls.Add` 是追加到 Z 序**最下层**；后加的滑块被子面板整块盖住，画了但看不见，要 `BringToFront()`。
+
+### 4.7.1 版本号
+
+只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.2.0</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
 
 ### 4.8 剪贴板历史
 
@@ -306,6 +323,9 @@ dotnet test
 | `SvgPath` 变换用 `MatrixOrder.Append` | GDI+ 默认 Prepend 会让 offset 被 scale 再乘一次，大尺寸图标直接飞出画布（曾导致下拉箭头画在裁剪区外看不见） |
 | 分层窗口上的文字用 GDI+ `DrawString` + `AntiAliasGridFit` | GDI ClearType 在预乘 alpha 面上有彩边 |
 | 悬浮面板截图校验用 `CopyFromScreen` | `DrawToBitmap`/`WM_PRINT` 对透明自绘面板产出空白 |
+| 设置页**固定高度 + 自绘滚动**，不再随内容长高 | 内容一多就把窗口撑出工作区，或者退化成原生滚动条；加一个设置项就改一次窗口尺寸，不可维护 |
+| 设置页的滚动条**自己画** | 原生 17px 系统灰在圆角卡片旁像补丁，且无法跟随深色主题 |
+| 版本号只有 `Directory.Build.props` 一处 | 界面写死一个、csproj 写一个，发版必然忘记其一 |
 | 标注层是**独立窗口，尺寸＝选区**，不再复用全屏暗角窗 | 全屏窗每帧要重铺整幅遮罩 + 全幅 `UpdateLayeredWindow`，1080p 下光提交就 ~3 ms，多屏更差 |
 | 标注预览走 **脏矩形增量**，不再每帧 CPU 全图重合成 | 旧路径每帧 `AnnotationComposer.Apply` + 全幅转位图 + 全屏提交，画笔 10 ms/帧、马赛克 25 ms/帧；拖动明显发涩。现为画笔 0.25 ms、图形 0.9 ms |
 | 预览与导出**共用 `AnnoPainter`（GDI+）** | 之前预览与导出是两条绘制实现，容易"看到的不等于存下的" |
@@ -324,6 +344,8 @@ dotnet test
 已完成（此前几轮）：图标改为 24 网格 SVG 统一权重、设置页 Fluent 卡片化 + 自绘 `Picker`/`ToggleSwitch`、剪贴板历史、单实例、开机自启、深浅色主题、`--ui-demo` / `--preview` / `--crop` 三个 dev 校验钩子。
 
 已完成（标注重构这一轮）：标注层独立窗口 + 脏矩形增量渲染（画笔 10→0.25 ms/帧）、十种标注工具（选择/画笔/直线/箭头/矩形/圆角矩形/椭圆/圆/高亮/马赛克）、八色预设 + 四档粗细、选择工具移动与八手柄自由缩放、`--bench` 性能基准 + `layer-shot.png` 实机证据。
+
+已完成（设置页收尾这一轮）：窗口固定高度 + `ScrollSheet` 自绘滚动（滚轮 / 拖滑块 / 点轨道 / Tab 跟随）、页脚版本号（`Directory.Build.props` 单一来源）、`--version`、页脚细分隔线。顺带修掉 `Dock Fill+Bottom` 顺序与 `Controls.Add` Z 序两个布局 bug——前者正是「常规」卡片底部没圆角收尾的真正原因。
 
 仍未做：
 
@@ -345,14 +367,16 @@ dotnet test
 5. 整屏级长选区仍能滚出高于一屏的图；真滚轮后变手动。  
 6. 元素模式：记事本按钮可命中；桌面空白可拖矩形回退。  
 7. 设置改热键/目录 → 退出再开仍在；无文字截断/重叠；四个下拉都有 chevron，开关与输入框左边缘对齐。  
+7.1 **设置页滚动**：窗口高度固定不随内容变；滚轮能滚（光标停在输入框上也要能滚）；拖右侧滑块、点轨道空白都能滚；Tab 一路按到底，焦点控件自动滚进视野。  
+7.2 **设置页末尾**：滚到底后「常规」卡片必须有完整圆角收尾（不能贴平/被按钮条压住），下方居中显示 `CaptureDemo vX.Y.Z`，版本号与源码 `Directory.Build.props` 一致。  
 8. 托盘右键：七项都有图标，右侧热键是灰色；「剪贴板」能开面板。  
 9. 剪贴板：复制图片/文本/文件各一条 → 双击文本回剪贴板、双击图片开「照片」→ 右键二级菜单项齐全 → 置顶后仍排首位。  
 10. **标注**：矩形选 800×600 以上的区域，用画笔快速划几下，笔迹要跟手、不掉帧、不断线；再拖一个椭圆和箭头，形状终点要严丝合缝跟着指针。  
 11. **标注**：切到选择工具，单击任一标注出现虚线框 + 八个手柄；拖动移动、拖角缩放都跟手；按撤销删掉这一条。  
 12. **标注**：点颜色换绿、点粗细换特粗，新画的线立即生效；选中已有标注再改色，改的是那一条。  
 13. **标注**：✓ 存出的 PNG 与屏幕上看到的一致（颜色、线宽、马赛克位置）。  
-14. `dotnet test` 全绿（当前 69 个）。  
-15. UI/标注改动后跑 `CaptureDemo.exe --ui-demo <folder>`，`main/settings/clipboard/tray/clipmenu/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交。  
+14. `dotnet test` 全绿（当前 72 个，含版本号格式与来源校验）。  
+15. UI/标注改动后跑 `CaptureDemo.exe --ui-demo <folder>`，`main/settings/settings-*-bottom/clipboard/tray/clipmenu/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交；`scroll.txt` 会打出视口/内容/偏移量，可作为布局回归的硬指标。  
 16. 改渲染路径后跑 `CaptureDemo.exe --bench <报告.txt>`，确认画笔单帧仍在 1 ms 量级，并打开它顺带生成的 `layer-shot.png` 确认标注层真的显示在屏幕上。
 
 ---

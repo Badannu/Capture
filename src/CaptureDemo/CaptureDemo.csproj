@@ -13,7 +13,7 @@
     <RollForward>Major</RollForward>
     <RootNamespace>CaptureDemo</RootNamespace>
     <AssemblyName>CaptureDemo</AssemblyName>
-    <Version>1.0.0</Version>
+    <!-- Version lives in Directory.Build.props so every project shares one number. -->
     <Description>Windows snipping demo: fullscreen, region, window, freeform, element, and scrolling capture.</Description>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

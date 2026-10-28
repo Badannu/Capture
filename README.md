@@ -23,6 +23,10 @@ Windows 10/11 上的轻量截图程序。热键唤起后整屏变暗（约 60% �
 
 设置窗口按「快捷键 / 保存 / 剪贴板 / 长截图 / 常规」分块，保存在 `%AppData%\CaptureDemo\settings.json`：唤醒热键、元素热键、长截图热键、剪贴板热键、保存目录、文件名模板、✓ 时是否复制剪贴板、是否记录剪贴板、保留条数、长截图速度和采样间隔、外观、开机自启。
 
+窗口高度是固定的，内容比窗口长时右侧出现自绘滚动条（滚轮、拖动滑块、点击空白轨道都能滚，Tab 切到看不见的控件会自动滚过去）。**版本号在滚动区最末尾**，滚到底才能看到——这样以后加设置项只会往下长，不会把窗口撑高。
+
+版本号只有一处定义：仓库根目录 `Directory.Build.props` 里的 `<Version>`。改那一个数字，exe 文件属性、设置页页脚、`CaptureDemo.exe --version` 三处同时跟着变。
+
 程序启动后停在托盘，不占任务栏。左键图标打开主窗口。右键菜单：打开主窗口、截图、长截图、元素截图、剪贴板、设置、退出。主窗口的关闭按钮只是回到托盘。只有「退出」会卸掉热键并结束进程。不做 OCR，也不上传。
 
 ## 环境
@@ -58,6 +62,12 @@ dotnet run --project src/CaptureDemo/CaptureDemo.csproj -- --long
 - `Ctrl+Alt+L` 直接长截图
 - `Ctrl+Alt+V` 打开剪贴板历史
 - `Esc` 取消当前截图；长截图里则停止并保存已经拼好的部分
+
+查版本（也可以给 `publish\CaptureDemo.exe` 传 `--version`）：
+
+```powershell
+dotnet run --project src/CaptureDemo/CaptureDemo.csproj -- --version
+```
 
 ## 发布单文件夹
 

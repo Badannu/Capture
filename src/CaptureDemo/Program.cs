@@ -1,3 +1,5 @@
+using CaptureDemo.Core;
+
 namespace CaptureDemo;
 
 internal enum LaunchMode
@@ -106,6 +108,18 @@ internal static class Program
                 int.Parse(args[5]),
                 int.Parse(args[6]),
                 int.Parse(args[7]));
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].TrimStart('-', '/').Equals("version", StringComparison.OrdinalIgnoreCase))
+        {
+            ApplicationConfiguration.Initialize();
+            // WinExe has no console, so a dialog is the only way to answer on a double-click.
+            MessageBox.Show(
+                AppInfo.Label + Environment.NewLine + "保存目录：" + AppSettings.DefaultDirectory(),
+                "关于",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
             return;
         }
 

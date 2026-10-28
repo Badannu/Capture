@@ -21,6 +21,7 @@ internal sealed class SettingsForm : ShellForm
     private readonly Picker _speed;
     private readonly Picker _sample;
     private readonly Picker _appearance;
+    private readonly ScrollSheet _scroll;
 
     private SettingsForm(AppSettings settings)
     {
@@ -30,22 +31,33 @@ internal sealed class SettingsForm : ShellForm
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(S(WindowWidth), S(672));
-        var footer = new Panel
+
+        // Fixed height on purpose: the sheet scrolls instead of the window growing with
+        // every new setting, so adding a row never changes the window's footprint.
+        var work = Screen.FromPoint(Cursor.Position).WorkingArea;
+        var width = S(WindowWidth);
+        var height = Math.Min(S(672), Math.Max(S(420), work.Height - S(72)));
+        ClientSize = new Size(width, height);
+
+        // Explicit stacking: a docked Fill plus a docked Bottom let the Fill claim the
+        // whole client area first, leaving the footer to paint over live content.
+        _scroll = new ScrollSheet();
+        Controls.Add(_scroll);
+
+        var footer = new BufferedPanel
         {
-            Dock = DockStyle.Bottom,
             Height = S(60),
             BackColor = Theme.AppBack,
         };
+        // A hairline keeps the scrolling content from bleeding into the button strip.
+        footer.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Theme.Divider);
+            e.Graphics.DrawLine(pen, 0, 0, footer.Width, 0);
+        };
         Controls.Add(footer);
 
-        var content = new BufferedPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoScroll = true,
-            BackColor = Theme.AppBack,
-        };
-        Controls.Add(content);
+        var sheet = _scroll.Sheet;
 
         _awaken = HotkeyBox(settings.AwakenHotkey);
         _element = HotkeyBox(settings.ElementHotkey);
@@ -70,7 +82,7 @@ internal sealed class SettingsForm : ShellForm
         var cardWidth = S(WindowWidth) - (S(24) * 2);
         var top = S(18);
 
-        top = AddCard(content, "快捷键", top, left, cardWidth, new (string, Control)[]
+        top = AddCard(sheet, "快捷键", top, left, cardWidth, new (string, Control)[]
         {
             ("唤醒截图条", _awaken),
             ("元素截图", _element),
@@ -78,39 +90,63 @@ internal sealed class SettingsForm : ShellForm
             ("剪贴板历史", _clipboard),
         });
 
-        top = AddCard(content, "保存", top, left, cardWidth, new (string, Control)[]
+        top = AddCard(sheet, "保存", top, left, cardWidth, new (string, Control)[]
         {
             ("保存目录", DirectoryRow()),
             ("文件名模板", _pattern),
             ("复制到剪贴板", _copyToClipboard),
         });
 
-        top = AddCard(content, "剪贴板", top, left, cardWidth, new (string, Control)[]
+        top = AddCard(sheet, "剪贴板", top, left, cardWidth, new (string, Control)[]
         {
             ("记录剪贴板", _watchClipboard),
             ("保留条数", _limit),
         });
 
-        top = AddCard(content, "长截图", top, left, cardWidth, new (string, Control)[]
+        top = AddCard(sheet, "长截图", top, left, cardWidth, new (string, Control)[]
         {
             ("滚动速度", _speed),
             ("采样间隔", _sample),
         });
 
-        top = AddCard(content, "常规", top, left, cardWidth, new (string, Control)[]
+        top = AddCard(sheet, "常规", top, left, cardWidth, new (string, Control)[]
         {
             ("外观", _appearance),
             ("开机自动启动", _startWithWindows),
         });
 
-        content.AutoScrollMinSize = new Size(0, top);
+        var stamp = new Label
+        {
+            Text = AppInfo.Label,
+            Font = UiFonts.Small,
+            ForeColor = Theme.Muted,
+            BackColor = Theme.AppBack,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+        };
+        stamp.SetBounds(left, top, cardWidth, S(18));
+        sheet.Controls.Add(stamp);
+
+        // Sits at the very end of the sheet: readable only after scrolling, and it is
+        // the natural place for the licence line and update notice later on.
+        var viewport = ClientSize.Height - footer.Height;
+        var natural = top + stamp.Height + S(22);
+        var contentHeight = Math.Max(natural, viewport);
+        stamp.Top = contentHeight - S(22) - stamp.Height;
+        _scroll.SetContentHeight(contentHeight);
+
         BuildFooter(footer);
 
-        // Size the window to its content instead of a fixed height: a hard-coded value
-        // either clips a card or forces the native scrollbar, which breaks the flat look.
-        var desired = top + S(10) + footer.Height;
-        var maxClient = Screen.FromPoint(Cursor.Position).WorkingArea.Height - S(120);
-        ClientSize = new Size(S(WindowWidth), Math.Clamp(desired, S(320), Math.Max(S(320), maxClient)));
+        void Stack()
+        {
+            var bar = footer.Height;
+            footer.SetBounds(0, ClientSize.Height - bar, ClientSize.Width, bar);
+            _scroll.SetBounds(0, 0, ClientSize.Width, Math.Max(1, ClientSize.Height - bar));
+        }
+
+        Stack();
+        SizeChanged += (_, _) => Stack();
+
         Shown += (_, _) =>
         {
             _awaken.Inner.Focus();
@@ -121,6 +157,13 @@ internal sealed class SettingsForm : ShellForm
     }
 
     public static SettingsForm CreateForPreview(AppSettings settings) => new(settings);
+
+    /// <summary>Dev-only: parks the sheet at its end so the version stamp can be reviewed.</summary>
+    internal void ScrollToEndForPreview() => _scroll.ScrollToEnd();
+
+    internal string DebugScroll() =>
+        _scroll.Describe() + " | client=" + ClientSize +
+        " | " + string.Join("; ", Controls.Cast<Control>().Select(c => $"{c.GetType().Name}/{c.Dock}={c.Bounds}"));
 
     public static bool TryEdit(IWin32Window owner, AppSettings settings)
     {

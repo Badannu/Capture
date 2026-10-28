@@ -43,6 +43,12 @@ internal static class UiDemo
                 form.Show();
                 Pump();
                 Save(form, Path.Combine(folder, $"settings-{tag}.png"));
+                form.ScrollToEndForPreview();
+                Pump();
+                File.AppendAllText(
+                    Path.Combine(folder, "scroll.txt"),
+                    $"settings-{tag}: {form.DebugScroll()}{Environment.NewLine}");
+                Save(form, Path.Combine(folder, $"settings-{tag}-bottom.png"));
                 form.Hide();
             }
 
