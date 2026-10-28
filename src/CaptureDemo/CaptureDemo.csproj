@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationVisualStyles>true</ApplicationVisualStyles>
+    <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
+    <RollForward>Major</RollForward>
+    <RootNamespace>CaptureDemo</RootNamespace>
+    <AssemblyName>CaptureDemo</AssemblyName>
+    <Version>1.0.0</Version>
+    <Description>Windows snipping demo: fullscreen, region, window, freeform, element, and scrolling capture.</Description>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="CaptureDemo" />
+    <Using Include="CaptureDemo.Capture" />
+    <Using Include="CaptureDemo.Element" />
+    <Using Include="CaptureDemo.LongShot" />
+    <Using Include="CaptureDemo.Native" />
+    <Using Include="CaptureDemo.Ui" />
+    <Using Include="CaptureDemo.Snip" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CaptureDemo.Core\CaptureDemo.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
+  </ItemGroup>
+</Project>

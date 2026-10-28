@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CaptureDemo.Core</RootNamespace>
+    <AssemblyName>CaptureDemo.Core</AssemblyName>
+    <Description>Pure stitching logic for CaptureDemo. No Win32 and no UI Automation.</Description>
+  </PropertyGroup>
+</Project>
