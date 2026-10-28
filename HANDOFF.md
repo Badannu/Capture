@@ -1,7 +1,7 @@
 # Capture 交接文档
 
 > 交接日期：2026-10-28（Asia/Shanghai）  
-> 产品名（当前）：**Capture**（v1.3.0；内部命名空间与 exe 仍叫 CaptureDemo）  
+> 产品名（当前）：**Capture**（v1.4.0；内部命名空间与 exe 仍叫 CaptureDemo）  
 > 目标读者：接手到 **本机 Cursor Agent** 继续开发的同事（或本机自己）  
 > 仓库形态：.NET 8 WinForms 绿色工程；云端曾在 Cursor Origin 草稿仓上迭代（agent `bc-f0195be6-8390-5a70-bca7-97bbb2557d95`），本 zip 以**当前可编译源码 + 预发布包**为准，不依赖云端仓是否已 publish。
 
@@ -41,8 +41,10 @@ CaptureDemo-handoff-YYYYMMDD/
   HANDOFF.md                 ← 本文件
   README.md                  ← 用户向说明（与源码仓一致）
   ARCHITECTURE.md            ← 模块与算法说明
+  PACKAGING.md               ← 运行依赖清单 / 便携版与在线版怎么出包
   CaptureDemo.sln
-  publish.ps1 / run-element.ps1 / run-long.ps1
+  publish.ps1 / pack.ps1 / run-element.ps1 / run-long.ps1
+  packaging/                 ← 两个发行包里的「使用说明.txt」模板
   src/
     CaptureDemo/             ← WinForms 宿主（UI、钩子、会话）
     CaptureDemo.Core/        ← 无 Win32：拼接、设置模型、标注光栅
@@ -55,6 +57,8 @@ CaptureDemo-handoff-YYYYMMDD/
   CaptureDemo-src.zip        ← 源码仓快照压缩副本（便于整包归档）
 ```
 
+> `pack.ps1` 产出的对外发行包在 `dist/`（已 gitignore，不进仓库）。
+
 **给本机 Agent 的最短路径：** 解压 → 用 Visual Studio / `dotnet` 打开 `CaptureDemo.sln` → 在 Windows 上 `dotnet run --project src/CaptureDemo` 或直接跑 `publish\CaptureDemo.exe`。
 
 ---
@@ -64,15 +68,20 @@ CaptureDemo-handoff-YYYYMMDD/
 | 场景 | 要求 |
 | --- | --- |
 | 跑 `publish\CaptureDemo.exe` | **Windows 10/11 x64** + [.NET 8 **Desktop** Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| 跑便携版（`pack.ps1` 产物） | 只要 Windows 10 1809+ / 11 x64，**无需任何运行时** |
 | 改代码并编译 | 同上 OS + [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) |
 | 只跑核心单测 | 任意有 .NET 8 SDK 的机器（含 Linux CI）：`dotnet test` |
 | Linux 交叉编 WinForms | 工程已 `EnableWindowsTargeting`，**能编不能跑 GUI** |
+
+完整依赖清单（每个 dll 能否省、程序往哪写、两种包体积对比）见 [PACKAGING.md](PACKAGING.md)。
 
 其它：
 
 - 清单声明 **Per-Monitor V2 DPI**；钩子坐标、UIA 边界、`CopyFromScreen` 统一按物理像素处理。
 - 配置文件：`%AppData%\Capture\settings.json`（旧 `%AppData%\CaptureDemo\settings.json` 首次启动自动迁移）
+- **便携模式**：exe 同级放一个 `portable.txt`，配置与剪贴板历史就改写到 exe 目录（`AppSettings.IsPortable()` / `SettingsFilePath()`，两个分支都有单测）。便携包也跳过旧剪贴板目录迁移，避免把已安装那份的历史搬走。
 - 默认输出：`%USERPROFILE%\Pictures\Capture\`（目录空时回落此路径）
+- 不需要 VC++ 运行库 / WebView2 / 额外字体，不联网、不装服务、不要求管理员权限。
 - 空闲不常驻 OCR、不常驻捕获会话；元素模式结束释放 UIA。
 
 ---
@@ -188,6 +197,7 @@ CaptureDemo-handoff-YYYYMMDD/
 - 滚轮走 `IMessageFilter` 提前拦截：单行 `TextBox` 会吞掉 `WM_MOUSEWHEEL`，否则光标停在输入框上时页面就滚不动了。
 - Tab 到视口外的控件会自动滚过去（`EnsureVisible` 递归挂 `Enter`）。
 - **版本号在滚动区最末尾**，贴底居中。加设置项只会让内容变长，不会再改窗口尺寸。
+- 版本号下面是**联系方式块**（`Ui/ContactBlock.cs`）：标题「联系我们：」+ `Telegram: Guth_Lee` / `Email: guthirelee@gmail.com` 两行，沿用「整体左对齐、成组居中」的排法。它不是卡片——这里没有可操作项，用卡片会暗示一个不存在的控件。点某一行会把值写进剪贴板，行尾闪 1.6 秒「已复制」（`Clipboard` 被别人占用时静默放弃，不谎报成功）。内容常量在 `AppInfo.SupportCaption / ContactTelegram / ContactEmail`，`--version` 弹窗读的是同一份。
 
 「关闭窗口后常驻托盘」默认开：关窗口只是回托盘，热键继续有效。关掉它之后，关窗口就是退出——`MainForm.OnFormClosing` 会 `AllowExit + BeginInvoke(ExitApp)`，把全局热键一并释放，方便让给别的软件，不会留下一个看不见却占着热键的进程。标签列宽 `S(136)` 是为了这行 9 个汉字不被折成两行。
 
@@ -198,7 +208,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 ### 4.7.1 版本号
 
-只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.3.0</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.3.0`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
+只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.4.0</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.4.0`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
 
 ### 4.8 剪贴板历史
 
@@ -276,6 +286,10 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1
 # 自包含（更大）：
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained
 
+# 对外发行包（dist/ 下两个 zip：便携版 60.7MB / 在线版 1.0MB）
+powershell -ExecutionPolicy Bypass -File .\pack.ps1
+powershell -ExecutionPolicy Bypass -File .\pack.ps1 -PortableOnly
+
 # 脚本快捷
 powershell -ExecutionPolicy Bypass -File .\run-element.ps1
 powershell -ExecutionPolicy Bypass -File .\run-long.ps1
@@ -287,7 +301,9 @@ powershell -ExecutionPolicy Bypass -File .\run-long.ps1
 dotnet test
 ```
 
-当前 **69** 个单测（设置、热键解析、标注几何与命中、剪贴板历史、拼接、WheelPace、PillMetrics 等）。**真实蒙版/钩子/滚轮必须在 Windows 手工验。**
+当前 **87** 个单测（设置、热键解析、便携路径、标注几何与命中、剪贴板历史、拼接、WheelPace、PillMetrics 等）。**真实蒙版/钩子/滚轮必须在 Windows 手工验。**
+
+`pack.ps1` 是 UTF-8 **带 BOM** 保存的：Windows PowerShell 5.1 按 ANSI 读无 BOM 脚本，字符串里的中文会把引号吞掉，直接语法报错。改这个脚本时别把 BOM 弄丢。
 
 ---
 
@@ -319,7 +335,9 @@ dotnet test
 8. 混 DPI 多屏时，跨屏窗框可能差几像素。  
 9. 高 20000 / 帧 150 硬顶。  
 10. 剪贴板历史只认文本/图片/文件；富文本按纯文本记；明文落盘，最多 30 条。  
-11. UI 仍在成品化过程中：图标、间距、设置页布局可能还要按 Windows 截图继续磨。
+11. UI 仍在成品化过程中：图标、间距、设置页布局可能还要按 Windows 截图继续磨。  
+12. 便携版要求目录可写；挪动目录后「开机自动启动」里的旧路径失效，重开一次开关即可。便携版与在线版共用同一个单实例互斥体，同一用户下别装两份。  
+13. 未做代码签名，首次运行会有 SmartScreen「未知发布者」提示（「更多信息 → 仍要运行」）。exe 名仍是 `CaptureDemo.exe`，改名会牵动互斥体名、Run 值名和所有脚本。
 
 ---
 
@@ -410,6 +428,7 @@ dotnet test
 
 ## 13. 联系上下文
 
+- 问题反馈渠道（也印在设置页最底部、`--version` 弹窗里）：Telegram `Guth_Lee`，邮箱 `guthirelee@gmail.com`。  
 - 负责人偏好：中间问题自行决策，少反复确认；要可用包。  
 - 时区：Asia/Shanghai。  
 - 历史云端实现会话：`https://cursor.com/agents/bc-f0195be6-8390-5a70-bca7-97bbb2557d95`（若仍可访问，仅作历史；**以本 zip 源码为准**）。

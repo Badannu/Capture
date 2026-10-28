@@ -27,7 +27,7 @@ Windows 10/11 上的轻量截图程序。热键唤起后整屏变暗（约 60% �
 
 设置窗口按「快捷键 / 保存 / 剪贴板 / 长截图 / 常规」分块，保存在 `%AppData%\Capture\settings.json`：唤醒热键、元素热键、长截图热键、剪贴板热键、保存目录、文件名模板、✓ 时是否复制剪贴板、是否记录剪贴板、保留条数、长截图速度和采样间隔、外观、开机自启、**关闭窗口后常驻托盘**。
 
-窗口高度是固定的，内容比窗口长时右侧出现自绘滚动条（滚轮、拖动滑块、点击空白轨道都能滚，Tab 切到看不见的控件会自动滚过去）。**版本号在滚动区最末尾**，滚到底才能看到——这样以后加设置项只会往下长，不会把窗口撑高。
+窗口高度是固定的，内容比窗口长时右侧出现自绘滚动条（滚轮、拖动滑块、点击空白轨道都能滚，Tab 切到看不见的控件会自动滚过去）。**版本号在滚动区最末尾**，滚到底才能看到——这样以后加设置项只会往下长，不会把窗口撑高。版本号下面是**联系方式**：`Telegram: Guth_Lee`、`Email: guthirelee@gmail.com`，点一下这一行就把值复制到剪贴板，行尾闪一下「已复制」。
 
 版本号只有一处定义：仓库根目录 `Directory.Build.props` 里的 `<Version>`。改那一个数字，exe 文件属性、设置页页脚、`CaptureDemo.exe --version` 三处同时跟着变。
 
@@ -35,9 +35,12 @@ Windows 10/11 上的轻量截图程序。热键唤起后整屏变暗（约 60% �
 
 ## 环境
 
-- Windows 10 或 Windows 11
-- 运行已发布的框架依赖版本：安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)（x64）
+- Windows 10（1809 及以上）或 Windows 11，**仅 64 位**
+- 便携版：不需要任何运行时，解压双击即用
+- 在线版（框架依赖）：安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)（x64）
 - 自行编译：安装 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+
+不需要 VC++ 运行库、WebView2 或额外字体，也不联网、不装服务。完整的依赖清单（每个 dll 干什么、程序会往哪写、两种包怎么对比）见 [PACKAGING.md](PACKAGING.md)。
 
 程序声明了 Per-Monitor V2 DPI。高分屏上 UIA 边界、鼠标坐标和 `CopyFromScreen` 使用同一套物理像素。
 
@@ -99,6 +102,22 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained
 ```
 
 `run-element.ps1` / `run-long.ps1` 会优先启动 `publish\CaptureDemo.exe`。
+
+## 对外分发：便携版 / 在线版
+
+`publish\` 是自用目录；要发给别人用 `pack.ps1`，它在 `dist\` 下产出两个 zip：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\pack.ps1
+#   Capture-<版本>-portable-win-x64.zip   60.7 MB  单个 exe，自带运行时，解压即用
+#   Capture-<版本>-online-win-x64.zip     1.0 MB   13 个文件，需 .NET 8 Desktop Runtime
+```
+
+- **便携包**里多了 `portable.txt`：有它，`settings.json` 和剪贴板历史就写在 exe 旁边，删文件夹＝彻底卸载。
+- **在线包**适合已经在用 .NET 的机器，或者自己配了运行时安装脚本的场景。
+- 只想要其中一个：`-PortableOnly` / `-OnlineOnly`。
+
+细节（依赖清单、写入位置、验收清单、以后要做安装器的话怎么选）在 [PACKAGING.md](PACKAGING.md)。
 
 ## 基本截图怎么用
 
@@ -191,6 +210,17 @@ dotnet test
 - 高度上限 20000 像素，帧数上限 150。超出后保存已经拼好的部分。
 - 剪贴板历史只认文本、图片和资源管理器复制的文件三项。富文本（HTML/RTF）只按纯文本记录；从 Office 复制的内容可能变成一段纯文字。历史上限 30 条，图片按 PNG 落盘，明文保存，不加密。
 - 进程空闲时不加载 OCR，也不保持捕获会话。元素模式结束时会释放 UI Automation 对象。
+
+## 问题反馈
+
+- Telegram：`Guth_Lee`
+- 邮箱：`guthirelee@gmail.com`
+
+设置页滚到底部也有这两行，点一下就把值复制到剪贴板。反馈时请带上：
+
+1. 版本号：`CaptureDemo.exe --version`（弹窗里有版本、保存目录、配置文件路径）；
+2. Windows 版本与显示缩放（例如「Win11 23H2 / 150%」）；
+3. 复现步骤——截图类问题最好附上原图或一段录屏，长截图问题说明选区里有没有框住固定标题栏/状态栏。
 
 ## 许可
 

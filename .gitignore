@@ -4,3 +4,7 @@ obj/
 *.user
 TestResults/
 artifacts/
+# pack.ps1 产出的发行包，每次重新打包，不进版本库
+dist/
+# --ui-demo / --icons / --preview 的截图输出
+_preview/

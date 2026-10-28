@@ -1,0 +1,47 @@
+Capture（在线版 / 框架依赖版）
+==============================
+
+体积小（3 MB 左右），但要求本机已经装好 .NET 8 桌面运行时。
+
+先决条件
+--------
+Windows 10 1809 以上 或 Windows 11，64 位。
+.NET 8 Desktop Runtime（x64）：https://dotnet.microsoft.com/download/dotnet/8.0
+  装的时候认准「.NET Desktop Runtime 8.0.x」这一项（Windows 桌面版，不是 ASP.NET 那项）。
+  已经装过 .NET 9 的话也能直接跑（程序允许向上滚动主版本）。
+  校验：命令行执行  dotnet --list-runtimes  应能看到 Microsoft.WindowsDesktop.App 8.x
+
+目录里有什么
+------------
+CaptureDemo.exe                   程序入口
+CaptureDemo.dll                  主程序
+CaptureDemo.Core.dll             核心逻辑（拼接、设置、热键解析）
+CaptureDemo.deps.json            依赖清单，缺了会在启动时报找不到程序集
+CaptureDemo.runtimeconfig.json   运行时配置，缺了会提示要装运行时
+FlaUI.Core.dll / FlaUI.UIA3.dll  元素截图用的 UI Automation 封装
+Interop.UIAutomationClient.dll   上面两个的 COM 互操作
+System.*.dll                     FlaUI 与 GDI+ 依赖的微软组件
+
+以上文件必须放在同一个文件夹里，不能只拷 exe。
+
+安装建议
+--------
+解压到 %LOCALAPPDATA%\Programs\Capture（或任意固定目录），再给 CaptureDemo.exe 建一个快捷方式。
+不要放在桌面或下载文件夹里长期运行——那两处容易被清理工具带走。
+
+运行后会自动生成
+----------------
+%AppData%\Capture\settings.json   设置
+%AppData%\Capture\clipboard\     剪贴板历史的图片与缩略图
+截图默认存到 图片\Capture（设置里可改）
+
+卸载
+----
+删掉程序文件夹，再删掉 %AppData%\Capture 即可。
+如果开过「开机自动启动」，先在设置里关掉，或删注册表 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+下的 CaptureDemo 值。
+
+问题反馈
+--------
+Telegram: Guth_Lee
+Email: guthirelee@gmail.com
