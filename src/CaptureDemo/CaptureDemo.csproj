@@ -12,9 +12,13 @@
     <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
     <RollForward>Major</RollForward>
     <RootNamespace>CaptureDemo</RootNamespace>
+    <!-- The file name stays CaptureDemo.exe so existing shortcuts, autostart entries
+         and the publish scripts keep working; the shell-facing identity is Capture. -->
     <AssemblyName>CaptureDemo</AssemblyName>
+    <Product>Capture</Product>
+    <AssemblyTitle>Capture</AssemblyTitle>
     <!-- Version lives in Directory.Build.props so every project shares one number. -->
-    <Description>Windows snipping demo: fullscreen, region, window, freeform, element, and scrolling capture.</Description>
+    <Description>Windows screenshot tool: fullscreen, region, window, freeform, element, and scrolling capture.</Description>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <ItemGroup>

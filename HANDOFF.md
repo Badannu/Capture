@@ -1,7 +1,7 @@
-# CaptureDemo 交接文档
+# Capture 交接文档
 
 > 交接日期：2026-10-28（Asia/Shanghai）  
-> 产品名（当前）：CaptureDemo / 截图演示  
+> 产品名（当前）：**Capture**（v1.3.0；内部命名空间与 exe 仍叫 CaptureDemo）  
 > 目标读者：接手到 **本机 Cursor Agent** 继续开发的同事（或本机自己）  
 > 仓库形态：.NET 8 WinForms 绿色工程；云端曾在 Cursor Origin 草稿仓上迭代（agent `bc-f0195be6-8390-5a70-bca7-97bbb2557d95`），本 zip 以**当前可编译源码 + 预发布包**为准，不依赖云端仓是否已 publish。
 
@@ -71,8 +71,8 @@ CaptureDemo-handoff-YYYYMMDD/
 其它：
 
 - 清单声明 **Per-Monitor V2 DPI**；钩子坐标、UIA 边界、`CopyFromScreen` 统一按物理像素处理。
-- 配置文件：`%AppData%\CaptureDemo\settings.json`
-- 默认输出：`%USERPROFILE%\Pictures\CaptureDemo\`（目录空时回落此路径）
+- 配置文件：`%AppData%\Capture\settings.json`（旧 `%AppData%\CaptureDemo\settings.json` 首次启动自动迁移）
+- 默认输出：`%USERPROFILE%\Pictures\Capture\`（目录空时回落此路径）
 - 空闲不常驻 OCR、不常驻捕获会话；元素模式结束释放 UIA。
 
 ---
@@ -96,15 +96,15 @@ CaptureDemo-handoff-YYYYMMDD/
 
 | 热键 | 作用 |
 | --- | --- |
-| `Ctrl+Alt+S` | 唤起顶部截图胶囊（默认进矩形相关流程） |
-| `Ctrl+Alt+E` | 直接元素截图 |
-| `Ctrl+Alt+L` | 直接长截图 |
+| `Ctrl+Alt+S` | 唤起顶部截图胶囊（默认选中矩形） |
+| `Ctrl+Alt+E` | 唤起同一胶囊，预选「元素截图」 |
+| `Ctrl+Alt+L` | 唤起同一胶囊，预选「长截图」 |
 | `Ctrl+Alt+V` | 打开剪贴板历史面板 |
 | `Esc` | 取消当前覆盖层；长截图中 = 停止并 **保存已拼接部分** |
 
 ### 4.3 顶部截图条（成品向）
 
-唤起后全屏约 **60% 压暗**（alpha≈153），顶中央 **矮胶囊条**（约 36px 高、约 16px 图标、圆角、近黑半透明），风格对齐 Windows 截图工具的位置/尺度。
+唤起后全屏约 **60% 压暗**（alpha≈153），顶中央 **胶囊条**（46px 高、40px 按钮、约 26px 图标、圆角、近黑半透明），尺度对齐 Windows 截图工具。36px 那版被反馈偏小，整条放大了一档；标注条仍是 36px（21 个格子）。
 
 六模式 **平铺、不折叠**（因本产品无录屏/OCR 等旁路，不需要 Windows 那种下拉收纳）：
 
@@ -115,7 +115,9 @@ CaptureDemo-handoff-YYYYMMDD/
 5. 元素截图  
 6. 任意形状  
 
-当前模式蓝色短下划线；悬停提示在图标下方；右侧齿轮 + 关闭（提示含 Esc）。图标已按圆角描边重画一轮，仍可能继续打磨。
+当前模式是一块**填充的蓝色圆角底板 + 白图标**（原来是细下划线）。这不是装饰：选中长截图/元素截图后胶囊不再销毁，而是留在原地等框选，需要持续可见的选中态。悬停提示在图标下方；右侧齿轮 + 关闭（提示含 Esc）。
+
+**模式切换不再结束会话**：六个模式都在同一个 `SnipSession` 里，切模式只改高亮 + 覆盖层提示。长截图拖完矩形后才 `Finish(Follow=Long, preset)` 交给滚动拼接；元素截图直接在同一个覆盖层里做 UIA 悬停（`Element/ElementHover.cs`，滚轮换层级），单击才交出去。三个热键、托盘项、主窗口按钮都走 `MainForm.StartSnipAsync(SnipMode initial)` 这一个入口。
 
 ### 4.4 基础四种截图 + 标注条
 
@@ -145,8 +147,10 @@ CaptureDemo-handoff-YYYYMMDD/
 ### 4.5 元素截图
 
 - FlaUI UIA3 `FromPoint` / `ElementFromPoint`；沿 Parent 链；滚轮切换父子层级。  
+- **已经并入统一覆盖层**：`Element/ElementHover.cs` 只负责「指针下是哪个控件 / 滚轮换到哪一层」，`SnipSession` 负责画洞和提示。胶囊条在这一步保持可见、模式保持高亮。  
 - 覆盖层点击穿透 + 低级钩子吃左键/滚轮，避免点穿。  
-- 无控件树 → 提示后允许同一次会话拖矩形回退。  
+- UIA 不可用（锁定环境 / Provider 崩）时自动退回矩形模式并在提示条上说明原因，不会把胶囊停在一个死掉的模式上。  
+- 单击后走 `SnipFollow.Element` + `preset`，`ElementCaptureSession.RunAsync(settings, preset)` 直接抓那一块，**不会让用户选第二次**；`preset` 为空时才走它自带的拖矩形覆盖层（老入口保留）。  
 - 截取前藏蒙版；`WDA_EXCLUDEFROMCAPTURE` 双保险。
 
 ### 4.6 长截图（重点算法）
@@ -169,7 +173,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 ### 4.7 设置页
 
-分组：快捷键 / 保存 / 剪贴板 / 长截图 / 常规。  
+分组：快捷键 / 保存 / 剪贴板 / 长截图 / 常规（常规里依次是外观、开机自动启动、**关闭窗口后常驻托盘**）。  
 要求：无大段说明废话、标签不截断、「浏览…」完整；勿再出现文字重叠绘制 bug。  
 实现：`ShellForm` + `ScrollSheet` + `CardPanel` 卡片；下拉是自绘 `Picker`（原生 `ComboBox` 的 3D 箭头和卡片风格不搭）；开关是 `ToggleSwitch`，**与输入框同为左对齐**（曾被居中放在编辑列，读起来像错位）。
 
@@ -181,6 +185,8 @@ CaptureDemo-handoff-YYYYMMDD/
 - Tab 到视口外的控件会自动滚过去（`EnsureVisible` 递归挂 `Enter`）。
 - **版本号在滚动区最末尾**，贴底居中。加设置项只会让内容变长，不会再改窗口尺寸。
 
+「关闭窗口后常驻托盘」默认开：关窗口只是回托盘，热键继续有效。关掉它之后，关窗口就是退出——`MainForm.OnFormClosing` 会 `AllowExit + BeginInvoke(ExitApp)`，把全局热键一并释放，方便让给别的软件，不会留下一个看不见却占着热键的进程。标签列宽 `S(136)` 是为了这行 9 个汉字不被折成两行。
+
 两个踩过的布局坑，改这块前先读：
 
 1. `Dock=Fill` + `Dock=Bottom` 混用时，Fill 会先占满整个客户区，Bottom 只是盖在上面——内容被按钮条实心遮挡，看着像「卡片底部被切」。改成显式 `SetBounds` 堆叠。
@@ -188,7 +194,7 @@ CaptureDemo-handoff-YYYYMMDD/
 
 ### 4.7.1 版本号
 
-只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.2.0</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
+只有一处定义：仓库根 `Directory.Build.props` 的 `<Version>1.3.0</Version>`。`CaptureDemo.Core/AppInfo.cs` 从程序集 `AssemblyInformationalVersion` 读，并截掉 SourceLink 追加的 `+<commit>`。设置页页脚（当前显示 `Capture v1.3.0`）和 `--version` 都走这个值，不会出现界面与 exe 属性不一致。
 
 ### 4.8 剪贴板历史
 
@@ -197,7 +203,7 @@ CaptureDemo-handoff-YYYYMMDD/
 - 面板：`ClipboardForm` 分层窗口自绘，一次 8 行，滚轮翻页；表头显示条数，页脚「清空历史」+「双击打开 · Esc 关闭」。  
 - 双击：文本 → 写回剪贴板；图片/文件 → 系统默认程序打开。右键二级菜单：打开/复制、复制到剪贴板、复制路径、另存为…、在文件夹中显示、置顶/取消置顶、删除、清空历史。  
 - 置顶项优先排序；容量满先删最旧的未置顶项。自身写剪贴板有 500ms 回声窗口，不会生成新记录。  
-- 落盘：`%AppData%\CaptureDemo\clipboard\`（PNG ≤4096 边长 + 正方形缩略图 + `index.json`），明文。  
+- 落盘：`%AppData%\Capture\clipboard\`（旧目录首次启动 `Directory.Move` 过来）（PNG ≤4096 边长 + 正方形缩略图 + `index.json`），明文。  
 - 纯逻辑（排序/去重/置顶/裁剪/索引往返）在 `CaptureDemo.Core/ClipboardHistory.cs`，有 13 个单测。
 
 ---
@@ -283,7 +289,7 @@ dotnet test
 
 ## 7. 配置字段（settings.json）
 
-路径：`%AppData%\CaptureDemo\settings.json`  
+路径：`%AppData%\Capture\settings.json`  
 模型：`CaptureDemo.Core.AppSettings`（以源码为准）。典型字段：
 
 - 唤醒 / 元素 / 长截图 / 剪贴板热键字符串  
@@ -355,7 +361,7 @@ dotnet test
 
 1. 采集后端评估（WGC / `PrintWindow(PW_RENDERFULLCONTENT)` 抓被遮挡窗口，失败回退 GDI）。  
 2. 长图：横向、逆向、`PageDown` 兼容、浏览器专用滚动消息。  
-3. 安装器 / 签名 / 改正式产品名（勿一直叫 Demo）。  
+3. 安装器 / 签名；若要连 exe 名一起改成 Capture.exe，需要同步 `publish.ps1`、`run-*.ps1`、`SingleInstance` 互斥名与已发出去的快捷方式。  
 4. 若要把 Origin 草稿仓正式 publish：需负责人选定仓库名与可见性。
 
 ---
@@ -364,14 +370,16 @@ dotnet test
 
 在 Windows 11：
 
-1. 托盘启动 → 关主窗仍在托盘 → 右键设置 **只出设置** → 退出才杀进程。  
-2. `Ctrl+Alt+S` → 六图标平铺、蓝线、悬停名、Esc 关。  
+1. 托盘启动 → 关主窗仍在托盘 → 右键设置 **只出设置** → 退出才杀进程；设置里关掉「关闭窗口后常驻托盘」后，关窗口应直接退出且热键立刻失效。  
+2. `Ctrl+Alt+S` → 六图标平铺、当前模式是蓝色底板、悬停名、Esc 关。  
 3. 矩形 → 标注 → ✗ 无文件；✓ 有 PNG +（默认）剪贴板。  
 4. 标注条「长截图」能进入滚动；洞外保持暗、洞形状不变。  
 5. 整屏级长选区仍能滚出高于一屏的图；真滚轮后变手动。  
 5.1 **底部固定栏**：Word 里把底部「第 N 页 / 共 M 页 · 字数 · 120%」那条状态栏一起框进来再滚。应能一直滚到文档末尾（不得几帧就停），状态栏在长图里只出现一次且完整；页码从 3 变到 4、5 时也不能提前结束。  
 5.2 同一文档只框正文（不含状态栏）再滚一次，结果高度与 5.1 除状态栏外一致，不能因为这次改动变短或错行。  
-6. 元素模式：记事本按钮可命中；桌面空白可拖矩形回退。  
+6. 元素模式：点胶囊上的「元素截图」后**胶囊仍在**、底板亮着；记事本按钮可命中，滚轮能换层，单击后胶囊才消失并直接保存（只选一次）。  
+6.1 `Ctrl+Alt+L` / `Ctrl+Alt+E` → 胶囊弹出且对应模式已选中；长截图拖完矩形才进入滚动，不是一按热键就跳走。  
+6.2 标注条点「颜色」→ 选一个色 → **小组件不消失**，可连选；点画布任意处才收起，且那一下不落笔；Esc 第一下只关小组件。  
 7. 设置改热键/目录 → 退出再开仍在；无文字截断/重叠；四个下拉都有 chevron，开关与输入框左边缘对齐。  
 7.1 **设置页滚动**：窗口高度固定不随内容变；滚轮能滚（光标停在输入框上也要能滚）；拖右侧滑块、点轨道空白都能滚；Tab 一路按到底，焦点控件自动滚进视野。  
 7.2 **设置页末尾**：滚到底后「常规」卡片必须有完整圆角收尾（不能贴平/被按钮条压住），下方居中显示 `CaptureDemo vX.Y.Z`，版本号与源码 `Directory.Build.props` 一致。  
@@ -381,8 +389,8 @@ dotnet test
 11. **标注**：切到选择工具，单击任一标注出现虚线框 + 八个手柄；拖动移动、拖角缩放都跟手；按撤销删掉这一条。  
 12. **标注**：点颜色换绿、点粗细换特粗，新画的线立即生效；选中已有标注再改色，改的是那一条。  
 13. **标注**：✓ 存出的 PNG 与屏幕上看到的一致（颜色、线宽、马赛克位置）。  
-14. `dotnet test` 全绿（当前 75 个，含版本号格式与来源校验、状态栏读数变化、单帧卡住、白页位移窗口）。  
-15. UI/标注改动后跑 `CaptureDemo.exe --ui-demo <folder>`，`main/settings/settings-*-bottom/clipboard/tray/clipmenu/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交；`scroll.txt` 会打出视口/内容/偏移量，可作为布局回归的硬指标。  
+14. `dotnet test` 全绿（当前 82 个，含版本号格式与来源校验、旧设置目录迁移、常驻开关默认值、胶囊放大与热点命中、状态栏读数变化、单帧卡住、白页位移窗口）。  
+15. UI/标注改动后跑 `CaptureDemo.exe --ui-demo <folder>`，`main/settings/settings-*-bottom/clipboard/tray/clipmenu/capture-rectangle/capture-long/capture-element/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交；`scroll.txt` 会打出视口/内容/偏移量，可作为布局回归的硬指标。  
 16. 改渲染路径后跑 `CaptureDemo.exe --bench <报告.txt>`，确认画笔单帧仍在 1 ms 量级，并打开它顺带生成的 `layer-shot.png` 确认标注层真的显示在屏幕上。
 
 ---

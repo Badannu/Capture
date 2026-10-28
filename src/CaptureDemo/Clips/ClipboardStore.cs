@@ -11,10 +11,41 @@ internal sealed class ClipboardStore
     private const int MaxEdge = 4096;
 
     public ClipboardStore()
-        : this(Path.Combine(
-            Path.GetDirectoryName(AppSettings.DefaultFilePath()) ?? AppContext.BaseDirectory,
-            "clipboard"))
+        : this(DefaultFolder())
     {
+    }
+
+    /// <summary>
+    /// History sits next to the settings file, so the rename to Capture moved it too.
+    /// Move the legacy folder across once instead of starting with an empty panel.
+    /// </summary>
+    private static string DefaultFolder()
+    {
+        var current = Path.GetDirectoryName(AppSettings.DefaultFilePath()) ?? AppContext.BaseDirectory;
+        var folder = Path.Combine(current, "clipboard");
+        if (Directory.Exists(folder))
+        {
+            return folder;
+        }
+
+        var legacyRoot = Path.GetDirectoryName(AppSettings.LegacyFilePath());
+        var legacy = string.IsNullOrEmpty(legacyRoot) ? null : Path.Combine(legacyRoot, "clipboard");
+        if (legacy == null || !Directory.Exists(legacy))
+        {
+            return folder;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(current);
+            Directory.Move(legacy, folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Locked or on another volume: keep using a fresh folder rather than fail.
+        }
+
+        return folder;
     }
 
     public ClipboardStore(string folder)

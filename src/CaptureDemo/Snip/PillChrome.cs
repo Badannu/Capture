@@ -339,8 +339,8 @@ internal sealed class CapturePillForm : LayeredChromeForm
 
     protected override void Relayout()
     {
-        var button = S(PillMetrics.Button);
-        var gap = S(PillMetrics.Gap);
+        var button = S(PillMetrics.CaptureButton);
+        var gap = S(PillMetrics.CaptureGap);
         _widths = new[] { button, button, button, button, button, button, gap, button, button };
         _ids = new[]
         {
@@ -354,9 +354,9 @@ internal sealed class CapturePillForm : LayeredChromeForm
             PillMetrics.Settings,
             PillMetrics.Close,
         };
-        var content = PillMetrics.ContentWidth(S(PillMetrics.Pad), _widths);
+        var content = PillMetrics.ContentWidth(S(PillMetrics.CapturePad), _widths);
         var shadow = S(PillMetrics.Shadow);
-        ClientSize = new Size(content + shadow * 2, S(PillMetrics.BarHeight) + shadow * 2);
+        ClientSize = new Size(content + shadow * 2, S(PillMetrics.CaptureBarHeight) + shadow * 2);
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
@@ -465,14 +465,22 @@ internal sealed class CapturePillForm : LayeredChromeForm
         _ => null,
     };
 
-    private int Hit(Point point) => PillMetrics.Hit(point.X, point.Y, S(PillMetrics.Shadow), S(PillMetrics.BarHeight), S(PillMetrics.Pad), _widths, _ids);
+    private int Hit(Point point) =>
+        PillMetrics.Hit(
+            point.X,
+            point.Y,
+            S(PillMetrics.Shadow),
+            S(PillMetrics.CaptureBarHeight),
+            S(PillMetrics.CapturePad),
+            _widths,
+            _ids);
 
     private Rectangle SlotBounds(int id)
     {
         var shadow = S(PillMetrics.Shadow);
-        var cursor = shadow + S(PillMetrics.Pad);
+        var cursor = shadow + S(PillMetrics.CapturePad);
         var top = shadow;
-        var height = S(PillMetrics.BarHeight);
+        var height = S(PillMetrics.CaptureBarHeight);
         for (var i = 0; i < _widths.Length && i < _ids.Length; i++)
         {
             if (_ids[i] == id)
@@ -499,31 +507,41 @@ internal sealed class CapturePillForm : LayeredChromeForm
         {
             graphics.Clear(Color.Transparent);
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var body = new Rectangle(shadow, shadow, Width - shadow * 2, S(PillMetrics.BarHeight));
+            var body = new Rectangle(shadow, shadow, Width - shadow * 2, S(PillMetrics.CaptureBarHeight));
             DrawBar(graphics, body);
-            var cursor = body.Left + S(PillMetrics.Pad);
+            var cursor = body.Left + S(PillMetrics.CapturePad);
             for (var i = 0; i < _widths.Length; i++)
             {
                 var slot = new Rectangle(cursor, body.Top, _widths[i], body.Height);
                 var id = _ids[i];
-                if (id != 0 && _hover == id)
+                var mode = ModeFor(id);
+                var selected = mode is SnipMode active && active == _mode;
+                if (id != 0 && _hover == id && !selected)
                 {
                     using var hover = new SolidBrush(Color.FromArgb(28, 255, 255, 255));
                     using var hoverPath = PillDraw.Round(Rectangle.Inflate(slot, -S(3), -S(5)), S(6));
                     graphics.FillPath(hover, hoverPath);
                 }
 
-                var mode = ModeFor(id);
+                // A filled plate, not just a hairline: the mode has to stay visibly
+                // picked while the user frames the region, because the bar no longer
+                // disappears when a capture mode is chosen.
+                if (selected)
+                {
+                    using var platePath = PillDraw.Round(Rectangle.Inflate(slot, -S(2), -S(4)), S(9));
+                    using var plate = new SolidBrush(Color.FromArgb(52, Theme.SnipAccentLine));
+                    graphics.FillPath(plate, platePath);
+                    using var edge = new Pen(Color.FromArgb(140, Theme.SnipAccentLine), Math.Max(1.2f, S(1)));
+                    graphics.DrawPath(edge, platePath);
+                }
+
                 if (mode is SnipMode chosen)
                 {
-                    DrawIcon(graphics, (g, r, c) => SnipModeInfo.Draw(chosen, g, r, c), slot, Theme.SnipInk);
-                    if (chosen == _mode)
-                    {
-                        var line = new Rectangle(slot.Left + (slot.Width - S(14)) / 2, slot.Bottom - S(7), S(14), S(2));
-                        using var accent = new SolidBrush(Theme.SnipAccentLine);
-                        using var accentPath = PillDraw.Round(line, S(1));
-                        graphics.FillPath(accent, accentPath);
-                    }
+                    DrawIcon(
+                        graphics,
+                        (g, r, c) => SnipModeInfo.Draw(chosen, g, r, c),
+                        slot,
+                        selected ? Color.White : Theme.SnipInk);
                 }
                 else if (id == PillMetrics.Settings)
                 {

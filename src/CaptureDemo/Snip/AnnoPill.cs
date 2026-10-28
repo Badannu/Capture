@@ -69,6 +69,12 @@ internal sealed class AnnoPillForm : LayeredChromeForm
 
     public AnnoTool Tool => _tool;
 
+    /// <summary>True while either style popup is on screen. The session uses this to decide
+    /// whether a click elsewhere should dismiss instead of drawing.</summary>
+    public bool AnyPopupVisible => IsUp(_colors) || IsUp(_weights);
+
+    public bool PopupContains(Point screen) => Hits(_colors, screen) || Hits(_weights, screen);
+
     public void SetTool(AnnoTool tool)
     {
         _tool = tool;
@@ -163,7 +169,15 @@ internal sealed class AnnoPillForm : LayeredChromeForm
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
-        switch (Hit(e.Location))
+        var hit = Hit(e.Location);
+        // Any bar button other than the two chips dismisses the open popup first, the
+        // same way an outside click does on the canvas.
+        if (AnyPopupVisible && hit is not (ColorId or WeightId))
+        {
+            CloseStylePopups();
+        }
+
+        switch (hit)
         {
             case LongId:
                 LongShot?.Invoke();
@@ -199,10 +213,10 @@ internal sealed class AnnoPillForm : LayeredChromeForm
                 Choose(AnnoTool.Mosaic);
                 break;
             case ColorId:
-                OpenColors();
+                ToggleColors();
                 break;
             case WeightId:
-                OpenWeights();
+                ToggleWeights();
                 break;
             case UndoId:
                 UndoClicked?.Invoke();
@@ -234,6 +248,7 @@ internal sealed class AnnoPillForm : LayeredChromeForm
     private void OpenColors()
     {
         CloseStylePopups();
+        _tip.Hide();
         _colors.ShowColors(_color);
         AnchorPopup(_colors, ColorId);
     }
@@ -241,8 +256,31 @@ internal sealed class AnnoPillForm : LayeredChromeForm
     private void OpenWeights()
     {
         CloseStylePopups();
+        _tip.Hide();
         _weights.ShowWeights(_weight);
         AnchorPopup(_weights, WeightId);
+    }
+
+    private void ToggleColors()
+    {
+        if (IsUp(_colors))
+        {
+            _colors.Hide();
+            return;
+        }
+
+        OpenColors();
+    }
+
+    private void ToggleWeights()
+    {
+        if (IsUp(_weights))
+        {
+            _weights.Hide();
+            return;
+        }
+
+        OpenWeights();
     }
 
     private void AnchorPopup(LayeredChromeForm popup, int anchorId)
@@ -262,18 +300,23 @@ internal sealed class AnnoPillForm : LayeredChromeForm
         }
     }
 
-    private void CloseStylePopups()
+    /// <summary>Dismisses both popups. Called by the session on an outside click and on Esc.</summary>
+    public void CloseStylePopups()
     {
-        if (_colors.Visible)
+        if (IsUp(_colors))
         {
             _colors.Hide();
         }
 
-        if (_weights.Visible)
+        if (IsUp(_weights))
         {
             _weights.Hide();
         }
     }
+
+    private static bool IsUp(Form form) => form is { IsDisposed: false, Visible: true };
+
+    private static bool Hits(Form form, Point screen) => IsUp(form) && form.Bounds.Contains(screen);
 
     private void Choose(AnnoTool tool)
     {
@@ -305,6 +348,13 @@ internal sealed class AnnoPillForm : LayeredChromeForm
 
     private void ShowTip(int hit)
     {
+        // The popup is anchored right where the tip would sit, so they must not coexist.
+        if (AnyPopupVisible)
+        {
+            _tip.Hide();
+            return;
+        }
+
         var text = ToolFor(hit) is AnnoTool tool
             ? ToolName(tool)
             : hit switch

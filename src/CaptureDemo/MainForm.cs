@@ -48,14 +48,14 @@ internal sealed class MainForm : ShellForm
     {
         _launch = launch;
         _preview = preview;
-        _settings = settingsOverride ?? AppSettings.Load(AppSettings.DefaultFilePath());
+        _settings = settingsOverride ?? AppSettings.LoadForApp();
         Theme.Apply(ParseAppearance(_settings.Appearance));
         BackColor = Theme.AppBack;
         ForeColor = Theme.Text;
         _clipboard = new ClipboardService(_settings, listen: !preview, store: null);
         _clipboard.Changed += UpdateClipboardCard;
 
-        Text = "截图";
+        Text = AppInfo.Product;
         Icon = IconFactory.AppIcon();
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -122,8 +122,18 @@ internal sealed class MainForm : ShellForm
     {
         if (!_allowExit && e.CloseReason == CloseReason.UserClosing)
         {
+            if (_settings.CloseToTray)
+            {
+                e.Cancel = true;
+                HideToTray();
+                return;
+            }
+
+            // "不常驻" makes closing the window the quit gesture: the global hotkeys have to
+            // be released, otherwise the process would linger invisibly and keep them.
             e.Cancel = true;
-            HideToTray();
+            _allowExit = true;
+            BeginInvoke((Action)ExitApp);
             return;
         }
 
@@ -322,20 +332,15 @@ internal sealed class MainForm : ShellForm
 
         SnipIcons.CaptureMark(g, tile, Color.FromArgb(246, 247, 250), 1.65f);
 
+        // The old subtitle ("hotkey · stays in the tray") is gone — residency is a
+        // setting now — so the product name is centred against the 44 px mark instead
+        // of sitting above an empty line.
         TextRenderer.DrawText(
             g,
-            "截图",
+            AppInfo.Product,
             UiFonts.Title,
-            new Rectangle(tile.Right + S(12), S(16), S(240), S(28)),
+            new Rectangle(tile.Right + S(14), tile.Top, S(300), tile.Height),
             Theme.Text,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
-
-        TextRenderer.DrawText(
-            g,
-            _settings.AwakenHotkey + " 随时开始 · 关闭窗口后常驻托盘",
-            UiFonts.Small,
-            new Rectangle(tile.Right + S(12), S(44), S(360), S(20)),
-            Theme.Muted,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
 
         base.OnPaint(e);
@@ -369,7 +374,12 @@ internal sealed class MainForm : ShellForm
     }
 
     // ── capture entry points ────────────────────────────────────────────────
-    private async Task StartSnipAsync()
+    /// <summary>
+    /// Every entry point — hotkey, tray item, main-window chip — opens the same capsule
+    /// with the requested mode already selected. Long and element capture are picked
+    /// *in* that capsule now, instead of jumping straight into a separate picker.
+    /// </summary>
+    private async Task StartSnipAsync(SnipMode initial = SnipMode.Rectangle)
     {
         if (Interlocked.Exchange(ref _gate, 1) == 1)
         {
@@ -381,22 +391,21 @@ internal sealed class MainForm : ShellForm
         try
         {
             HideToTray();
-            var result = await SnipSession.RunAsync(_settings, SnipMode.Rectangle);
-            if (result.Follow == SnipFollow.Long)
+            var result = await SnipSession.RunAsync(_settings, initial);
+            switch (result.Follow)
             {
-                Apply(await LongCaptureSession.RunAsync(_settings, result.Preset));
-            }
-            else if (result.Follow == SnipFollow.Element)
-            {
-                Apply(await ElementCaptureSession.RunAsync(_settings));
-            }
-            else if (result.Follow == SnipFollow.Settings)
-            {
-                _openSettings = true;
-            }
-            else
-            {
-                Apply(result.Outcome);
+                case SnipFollow.Long:
+                    Apply(await LongCaptureSession.RunAsync(_settings, result.Preset));
+                    break;
+                case SnipFollow.Element:
+                    Apply(await ElementCaptureSession.RunAsync(_settings, result.Preset, result.Note));
+                    break;
+                case SnipFollow.Settings:
+                    _openSettings = true;
+                    break;
+                default:
+                    Apply(result.Outcome);
+                    break;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -409,53 +418,9 @@ internal sealed class MainForm : ShellForm
         }
     }
 
-    private async Task StartElementAsync()
-    {
-        if (Interlocked.Exchange(ref _gate, 1) == 1)
-        {
-            return;
-        }
+    private Task StartElementAsync() => StartSnipAsync(SnipMode.Element);
 
-        _showWhenDone = Visible;
-        _clipboard.HidePanel();
-        try
-        {
-            HideToTray();
-            Apply(await ElementCaptureSession.RunAsync(_settings));
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            ReportFailure(ex);
-        }
-        finally
-        {
-            FinishCapture();
-        }
-    }
-
-    private async Task StartLongAsync()
-    {
-        if (Interlocked.Exchange(ref _gate, 1) == 1)
-        {
-            return;
-        }
-
-        _showWhenDone = Visible;
-        _clipboard.HidePanel();
-        try
-        {
-            HideToTray();
-            Apply(await LongCaptureSession.RunAsync(_settings));
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            ReportFailure(ex);
-        }
-        finally
-        {
-            FinishCapture();
-        }
-    }
+    private Task StartLongAsync() => StartSnipAsync(SnipMode.Long);
 
     private void FinishCapture()
     {
@@ -629,7 +594,7 @@ internal sealed class MainForm : ShellForm
         }
 
         HideToTray();
-        _tray?.ShowBalloonTip(2600, "截图", "已在托盘。左键打开主窗口，右键可用剪贴板、截图或退出。", ToolTipIcon.None);
+        _tray?.ShowBalloonTip(2600, AppInfo.Product, "已在托盘。左键打开主窗口，右键可用剪贴板、截图或退出。", ToolTipIcon.None);
     }
 
     // ── tray ────────────────────────────────────────────────────────────────
@@ -643,7 +608,7 @@ internal sealed class MainForm : ShellForm
         _tray = new NotifyIcon
         {
             Icon = IconFactory.TrayIcon(),
-            Text = "截图",
+            Text = AppInfo.Product,
             Visible = true,
         };
         _tray.MouseClick += (_, e) =>

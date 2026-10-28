@@ -40,6 +40,13 @@ public sealed class AppSettings
 
     public bool LaunchAtStartup { get; set; }
 
+    /// <summary>
+    /// Closing the window leaves the app running in the tray with its global hotkeys
+    /// still registered. Turned off when the user would rather have the close button
+    /// actually quit (and free the hotkeys for something else).
+    /// </summary>
+    public bool CloseToTray { get; set; } = true;
+
     /// <summary>System / Light / Dark.</summary>
     public string Appearance { get; set; } = "System";
 
@@ -50,10 +57,45 @@ public sealed class AppSettings
     public static AppSettings CreateDefault() => new();
 
     public static string DefaultDirectory() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "CaptureDemo");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), AppInfo.Product);
 
     public static string DefaultFilePath() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppInfo.Product, "settings.json");
+
+    /// <summary>Pre-rename settings file. Read once so an upgrade keeps its hotkeys.</summary>
+    public static string LegacyFilePath() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CaptureDemo", "settings.json");
+
+    /// <summary>
+    /// Loads the app's own settings, migrating the legacy file on first run under the
+    /// new product name. Paths are parameters so the migration can be unit tested.
+    /// </summary>
+    public static AppSettings LoadForApp(string? path = null, string? legacyPath = null)
+    {
+        path ??= DefaultFilePath();
+        if (File.Exists(path))
+        {
+            return Load(path);
+        }
+
+        legacyPath ??= LegacyFilePath();
+        if (!File.Exists(legacyPath))
+        {
+            return CreateDefault();
+        }
+
+        var migrated = Load(legacyPath);
+        try
+        {
+            migrated.Save(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Read-only profile: keep using the migrated values for this run.
+        }
+
+        return migrated;
+    }
 
     public string ResolveDirectory()
     {

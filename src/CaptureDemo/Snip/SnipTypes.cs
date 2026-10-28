@@ -18,4 +18,4 @@ internal enum SnipFollow
     Settings,
 }
 
-internal readonly record struct SnipResult(CaptureOutcome Outcome, SnipFollow Follow, Rectangle? Preset);
+internal readonly record struct SnipResult(CaptureOutcome Outcome, SnipFollow Follow, Rectangle? Preset, string? Note = null);

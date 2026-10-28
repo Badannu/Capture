@@ -1,13 +1,14 @@
 namespace CaptureDemo.Core;
 
 /// <summary>
-/// Unscaled geometry for the capture capsule: six mode icons, a gap, settings, close.
-/// Y is measured on the window bitmap, which includes a shadow margin.
+/// Unscaled geometry for the two capsules. Y is measured on the window bitmap,
+/// which includes a shadow margin.
 /// </summary>
 public static class PillMetrics
 {
     public const int Shadow = 8;
 
+    // ── annotation bar (dense: 21 slots, must not outgrow a 1080p screen) ────
     public const int BarHeight = 36;
 
     public const int Pad = 5;
@@ -15,6 +16,17 @@ public static class PillMetrics
     public const int Button = 32;
 
     public const int Gap = 8;
+
+    // ── capture mode capsule (first surface the user meets) ─────────────────
+    // Deliberately a size up from the annotation bar and close to the Windows
+    // snip bar (48 px at 100%), so it reads as a launcher rather than a strip.
+    public const int CaptureBarHeight = 46;
+
+    public const int CaptureButton = 40;
+
+    public const int CapturePad = 7;
+
+    public const int CaptureGap = 10;
 
     public const int Fullscreen = 1;
 
@@ -32,12 +44,20 @@ public static class PillMetrics
 
     public const int Close = 8;
 
-    public static int HitCaptureBar(int x, int y)
+    private static readonly int[] CaptureWidths =
     {
-        int[] widths = { Button, Button, Button, Button, Button, Button, Gap, Button, Button };
-        int[] ids = { Fullscreen, Rectangle, Window, Long, Element, Freeform, 0, Settings, Close };
-        return Hit(x, y, Shadow, BarHeight, Pad, widths, ids);
-    }
+        CaptureButton, CaptureButton, CaptureButton, CaptureButton, CaptureButton, CaptureButton,
+        CaptureGap,
+        CaptureButton, CaptureButton,
+    };
+
+    private static readonly int[] CaptureIds =
+    {
+        Fullscreen, Rectangle, Window, Long, Element, Freeform, 0, Settings, Close,
+    };
+
+    public static int HitCaptureBar(int x, int y) =>
+        Hit(x, y, Shadow, CaptureBarHeight, CapturePad, CaptureWidths, CaptureIds);
 
     public static int ContentWidth(int pad, ReadOnlySpan<int> widths)
     {

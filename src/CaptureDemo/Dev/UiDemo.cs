@@ -2,6 +2,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using CaptureDemo.Clips;
 using CaptureDemo.Core;
+using CaptureDemo.Snip;
 using CaptureDemo.Ui;
 
 namespace CaptureDemo.Dev;
@@ -85,8 +86,30 @@ internal static class UiDemo
                 }
             }
 
+            SaveCaptureBar(folder, tag);
             SaveAnnotationBar(folder, tag);
             SaveAnnotationSample(folder, tag);
+        }
+    }
+
+    /// <summary>
+    /// The capsule in each of the three states that matter: default rectangle, long
+    /// capture picked, element picked. The picked plate has to stay readable on a still
+    /// frame, since it is no longer a momentary flash.
+    /// </summary>
+    private static void SaveCaptureBar(string folder, string tag)
+    {
+        var work = Screen.FromPoint(Cursor.Position).WorkingArea;
+        foreach (var mode in new[] { SnipMode.Rectangle, SnipMode.Long, SnipMode.Element })
+        {
+            using var bar = new CapturePillForm();
+            bar.SetShortcuts(AppSettings.DefaultLongHotkey, AppSettings.DefaultElementHotkey);
+            bar.SetMode(mode);
+            bar.Place(work, null);
+            bar.Show();
+            Pump();
+            SaveLayered(bar, Path.Combine(folder, $"capture-{mode.ToString().ToLowerInvariant()}-{tag}.png"));
+            bar.Hide();
         }
     }
 
@@ -102,7 +125,7 @@ internal static class UiDemo
             bar.Hide();
         }
 
-        using (var colors = new StylePillForm { AutoHide = false })
+        using (var colors = new StylePillForm())
         {
             colors.ShowColors(AnnoPalette.Colors[0].ToArgb());
             colors.Place(work, null);
@@ -112,7 +135,7 @@ internal static class UiDemo
             colors.Hide();
         }
 
-        using (var weights = new StylePillForm { AutoHide = false })
+        using (var weights = new StylePillForm())
         {
             weights.ShowWeights(AnnoPalette.Weights[2]);
             weights.Place(work, null);

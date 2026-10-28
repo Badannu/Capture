@@ -1,5 +1,6 @@
 using System.Drawing.Imaging;
 using CaptureDemo.Core;
+using CaptureDemo.Element;
 
 namespace CaptureDemo.Snip;
 
@@ -12,6 +13,9 @@ internal sealed class SnipSession
     private AnnoPillForm? _anno;
     private AnnoLayerForm? _layer;
     private LowLevelInputHook? _hook;
+    private ElementHover? _element;
+    private readonly System.Windows.Forms.Timer _elementPump = new() { Interval = 70 };
+    private Point _elementPoint;
     private BgraBuffer? _base;
     private Point? _down;
     private readonly List<Point> _lasso = new();
@@ -75,8 +79,10 @@ internal sealed class SnipSession
         _hook.MouseMove += OnMove;
         _hook.LeftButtonDown += OnDown;
         _hook.LeftButtonUp += OnUp;
-        _hook.Escape += () => Finish(CaptureOutcome.Cancelled(), SnipFollow.None, null);
+        _hook.Wheel += OnWheel;
+        _hook.Escape += OnEscape;
         _hook.InstallMouseAndKeyboard();
+        _elementPump.Tick += (_, _) => PumpElement();
         SelectMode(initial);
     }
 
@@ -155,15 +161,37 @@ internal sealed class SnipSession
             return;
         }
 
+        _elementPump.Stop();
+
+        // Long capture no longer tears the capsule down on click. The mode is just a
+        // highlighted state until a region is framed, then the session hands the rect
+        // to the scrolling pipeline. Leaving the editor is the one exception: the
+        // region is already there, so hand it over straight away.
         if (mode == SnipMode.Long)
         {
-            Finish(CaptureOutcome.Cancelled(), SnipFollow.Long, _editing ? _selection : null);
+            if (_editing)
+            {
+                Finish(CaptureOutcome.Cancelled(), SnipFollow.Long, _selection);
+                return;
+            }
+
+            LeaveEditor();
+            _mode = mode;
+            _toolbar?.SetMode(mode);
+            _down = null;
+            _lasso.Clear();
+            PaintSelecting(HintFor(mode));
             return;
         }
 
         if (mode == SnipMode.Element)
         {
-            Finish(CaptureOutcome.Cancelled(), SnipFollow.Element, null);
+            LeaveEditor();
+            _mode = mode;
+            _toolbar?.SetMode(mode);
+            _down = null;
+            _lasso.Clear();
+            EnterElementHover();
             return;
         }
 
@@ -180,6 +208,36 @@ internal sealed class SnipSession
         _down = null;
         _lasso.Clear();
         PaintSelecting(HintFor(mode));
+    }
+
+    /// <summary>
+    /// Element mode lives in this session too, so the capsule keeps showing the picked
+    /// mode while the pointer walks the UI tree. The wheel climbs to the parent element.
+    /// </summary>
+    private void EnterElementHover()
+    {
+        if (_element == null)
+        {
+            try
+            {
+                _element = new ElementHover();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Locked-down machine or a broken automation provider: fall back rather
+                // than leave the capsule parked on a mode that cannot do anything.
+                SelectMode(SnipMode.Rectangle);
+                PaintSelecting("元素截图不可用：" + ex.Message);
+                return;
+            }
+        }
+
+        ShowElement(_cursor);
+        // UIA hit tests can take tens of milliseconds on Chromium and Electron windows.
+        // Running one inside the mouse hook would drag the system pointer, so the hook
+        // only records the position and this timer does the probing.
+        _elementPoint = _cursor;
+        _elementPump.Start();
     }
 
     private void EnterFullscreen()
@@ -255,6 +313,7 @@ internal sealed class SnipSession
         _selected = null;
         _dragHandle = AnnoHandle.None;
         _base = null;
+        _anno?.CloseStylePopups();
         if (_layer is { Visible: true })
         {
             _layer.Hide();
@@ -303,7 +362,13 @@ internal sealed class SnipSession
             return;
         }
 
-        if (_mode == SnipMode.Rectangle && _down is Point anchor)
+        if (_mode == SnipMode.Element)
+        {
+            _elementPoint = screen;
+            return;
+        }
+
+        if (_mode is SnipMode.Rectangle or SnipMode.Long && _down is Point anchor)
         {
             _overlay?.ShowHole(_work, ScreenRects.Normalize(anchor, screen), "");
             return;
@@ -342,6 +407,14 @@ internal sealed class SnipSession
 
         if (IsChrome(screen))
         {
+            // Clicks that land on the annotation bar or a style popup belong to them.
+            return;
+        }
+
+        if (_anno is { AnyPopupVisible: true } open)
+        {
+            // Anywhere else dismisses the popup, and that click does not also draw.
+            open.CloseStylePopups();
             return;
         }
 
@@ -365,7 +438,7 @@ internal sealed class SnipSession
             return;
         }
 
-        if (_mode is SnipMode.Rectangle or SnipMode.Freeform)
+        if (_mode is SnipMode.Rectangle or SnipMode.Long or SnipMode.Freeform)
         {
             _down = screen;
             _lasso.Clear();
@@ -403,13 +476,34 @@ internal sealed class SnipSession
             return;
         }
 
-        if (_mode == SnipMode.Rectangle && _down is Point anchor)
+        if (_mode == SnipMode.Element)
+        {
+            var found = _element?.Current;
+            if (found is { } element && element.Bounds.Width >= 2 && element.Bounds.Height >= 2)
+            {
+                Finish(CaptureOutcome.Cancelled(), SnipFollow.Element, element.Bounds, element.Caption);
+            }
+            else
+            {
+                PaintSelecting("这里没有可识别的控件，换一处试试");
+            }
+
+            return;
+        }
+
+        if (_mode is SnipMode.Rectangle or SnipMode.Long && _down is Point anchor)
         {
             _down = null;
             var rect = ScreenRects.Normalize(anchor, screen);
             if (rect.Width < 8 || rect.Height < 8)
             {
                 PaintSelecting("再大一点");
+                return;
+            }
+
+            if (_mode == SnipMode.Long)
+            {
+                Finish(CaptureOutcome.Cancelled(), SnipFollow.Long, rect);
                 return;
             }
 
@@ -643,7 +737,78 @@ internal sealed class SnipSession
             }
         }
 
+        if (_mode == SnipMode.Element && _element != null)
+        {
+            ShowElement(_cursor);
+            return;
+        }
+
         _overlay?.ShowDim(_work, hint);
+    }
+
+    private void ShowElement(Point screen) => ShowSnapshot(_element?.Update(screen));
+
+    /// <summary>Timer-driven element probe. Repaints only when the hit element changes.</summary>
+    private void PumpElement()
+    {
+        if (_finished || _editing || _mode != SnipMode.Element || _element == null)
+        {
+            return;
+        }
+
+        var before = _element.Current;
+        var next = _element.Update(_elementPoint);
+        if (ReferenceEquals(before, next))
+        {
+            return;
+        }
+
+        ShowSnapshot(next);
+    }
+
+    private void ShowSnapshot(ElementSnapshot? snapshot)
+    {
+        if (snapshot is { } found)
+        {
+            var hole = Rectangle.Intersect(found.Bounds, NativeMethods.VirtualScreen());
+            if (hole.Width > 1 && hole.Height > 1)
+            {
+                var hint = string.IsNullOrWhiteSpace(found.Caption)
+                    ? "单击截取 · 滚轮换层"
+                    : found.Caption + " · 单击截取";
+                _overlay?.ShowHole(_work, hole, hint);
+                return;
+            }
+        }
+
+        _overlay?.ShowDim(_work, "这里没有可识别的控件，换一处试试");
+    }
+
+    private void OnWheel(int delta)
+    {
+        if (_finished || _editing || _mode != SnipMode.Element || _element == null)
+        {
+            return;
+        }
+
+        ShowSnapshot(_element.Cycle(delta));
+    }
+
+    private void OnEscape()
+    {
+        if (_finished)
+        {
+            return;
+        }
+
+        // Esc closes an open swatch popup before it gives up on the whole capture.
+        if (_anno is { AnyPopupVisible: true } bar)
+        {
+            bar.CloseStylePopups();
+            return;
+        }
+
+        Finish(CaptureOutcome.Cancelled(), SnipFollow.None, null);
     }
 
     private static string HintFor(SnipMode mode) => mode switch
@@ -651,6 +816,7 @@ internal sealed class SnipSession
         SnipMode.Rectangle => "拖出矩形",
         SnipMode.Window => "指向一个窗口",
         SnipMode.Freeform => "按住绘制",
+        SnipMode.Long => "拖出要拼接的区域",
         _ => "",
     };
 
@@ -663,7 +829,11 @@ internal sealed class SnipSession
 
     private bool IsChrome(Point screen)
     {
-        return Contains(_toolbar, screen) || Contains(_anno, screen);
+        // Style popups are separate windows, so a click on them must also reach them
+        // instead of being eaten by the capture hook.
+        return Contains(_toolbar, screen) ||
+               Contains(_anno, screen) ||
+               (_anno?.PopupContains(screen) ?? false);
     }
 
     private static bool Contains(Form? form, Point screen) =>
@@ -696,7 +866,7 @@ internal sealed class SnipSession
         return Point.Empty;
     }
 
-    private void Finish(CaptureOutcome outcome, SnipFollow follow, Rectangle? preset)
+    private void Finish(CaptureOutcome outcome, SnipFollow follow, Rectangle? preset, string? note = null)
     {
         if (_finished)
         {
@@ -704,7 +874,7 @@ internal sealed class SnipSession
         }
 
         _finished = true;
-        _done.TrySetResult(new SnipResult(outcome, follow, preset));
+        _done.TrySetResult(new SnipResult(outcome, follow, preset, note));
     }
 
     private void Cleanup()
@@ -724,6 +894,10 @@ internal sealed class SnipSession
 
         _hook?.Dispose();
         _hook = null;
+        _elementPump.Stop();
+        _elementPump.Dispose();
+        _element?.Dispose();
+        _element = null;
         if (_layer is { IsDisposed: false })
         {
             _layer.Dispose();

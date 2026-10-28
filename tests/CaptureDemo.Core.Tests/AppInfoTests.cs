@@ -20,6 +20,15 @@ public class AppInfoTests
     }
 
     [Fact]
+    public void ProductNameIsCapture()
+    {
+        // Renamed from "CaptureDemo": the window title, tray tooltip, about box and
+        // settings footer all read this constant, so a drift here is visible everywhere.
+        Assert.Equal("Capture", AppInfo.Product);
+        Assert.DoesNotContain("Demo", AppInfo.Label);
+    }
+
+    [Fact]
     public void VersionComesFromTheSharedBuildProperty()
     {
         // Directory.Build.props is the single place a release bumps; if this fails the

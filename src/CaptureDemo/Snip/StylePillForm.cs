@@ -7,6 +7,9 @@ namespace CaptureDemo.Snip;
 /// <summary>
 /// Two small popups: one row of preset ink colours, one row of stroke weights.
 /// Deliberately not a colour wheel — a snip needs a fast, unambiguous pick.
+/// The popup stays put until the caller dismisses it (a click outside, or Esc):
+/// closing on a timer made it vanish while the pointer was still travelling from
+/// the chip to the swatch.
 /// </summary>
 internal sealed class StylePillForm : LayeredChromeForm
 {
@@ -20,39 +23,16 @@ internal sealed class StylePillForm : LayeredChromeForm
     /// ratios so the four choices stay distinguishable at a glance.</summary>
     private static readonly int[] WeightSampleThickness = { 2, 4, 7, 10 };
 
-    private readonly System.Windows.Forms.Timer _watch;
     private int _hover;
     private int[] _widths = Array.Empty<int>();
     private int[] _ids = Array.Empty<int>();
     private int _currentColor = AnnoPalette.Colors[AnnoPalette.Default].ToArgb();
     private float _currentWeight = AnnoPalette.Weights[1];
-    private int _awayTicks;
     private bool _weightsMode;
-
-    public StylePillForm()
-    {
-        _watch = new System.Windows.Forms.Timer { Interval = 120 };
-        _watch.Tick += (_, _) =>
-        {
-            if (Visible && Bounds.Contains(Cursor.Position))
-            {
-                _awayTicks = 0;
-                return;
-            }
-
-            if (++_awayTicks >= 3)
-            {
-                Hide();
-            }
-        };
-    }
 
     public event Action<int>? ColorPicked;
 
     public event Action<float>? WeightPicked;
-
-    /// <summary>Dev previews keep the popup on screen; normal use closes it when the pointer leaves.</summary>
-    public bool AutoHide { get; set; } = true;
 
     public void ShowColors(int current)
     {
@@ -135,7 +115,9 @@ internal sealed class StylePillForm : LayeredChromeForm
             {
                 _currentWeight = AnnoPalette.Weights[index];
                 WeightPicked?.Invoke(_currentWeight);
-                Hide();
+                // Stays open on purpose: the selection ring has to be visible, and a
+                // second try must not need a second trip to the chip.
+                Render();
             }
         }
         else if (hit >= ColorBase)
@@ -145,7 +127,7 @@ internal sealed class StylePillForm : LayeredChromeForm
             {
                 _currentColor = AnnoPalette.Colors[index].ToArgb();
                 ColorPicked?.Invoke(_currentColor);
-                Hide();
+                Render();
             }
         }
 
@@ -155,19 +137,10 @@ internal sealed class StylePillForm : LayeredChromeForm
     protected override void OnVisibleChanged(EventArgs e)
     {
         base.OnVisibleChanged(e);
-        if (Visible)
+        if (!Visible)
         {
-            _awayTicks = 0;
-            if (AutoHide)
-            {
-                _watch.Start();
-            }
-
-            return;
+            _hover = 0;
         }
-
-        _watch.Stop();
-        _hover = 0;
     }
 
     protected override void Dispose(bool disposing)
@@ -175,8 +148,6 @@ internal sealed class StylePillForm : LayeredChromeForm
         if (disposing)
         {
             PillDraw.Forget(this);
-            _watch.Stop();
-            _watch.Dispose();
         }
 
         base.Dispose(disposing);

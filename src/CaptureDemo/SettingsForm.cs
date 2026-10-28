@@ -17,6 +17,7 @@ internal sealed class SettingsForm : ShellForm
     private readonly ToggleSwitch _copyToClipboard;
     private readonly ToggleSwitch _watchClipboard;
     private readonly ToggleSwitch _startWithWindows;
+    private readonly ToggleSwitch _closeToTray;
     private readonly Picker _limit;
     private readonly Picker _speed;
     private readonly Picker _sample;
@@ -63,11 +64,12 @@ internal sealed class SettingsForm : ShellForm
         _element = HotkeyBox(settings.ElementHotkey);
         _long = HotkeyBox(settings.LongHotkey);
         _clipboard = HotkeyBox(settings.ClipboardHotkey);
-        _directory = Field(settings.SaveDirectory, @"留空则用 图片\CaptureDemo");
+        _directory = Field(settings.SaveDirectory, $@"留空则用 图片\{AppInfo.Product}");
         _pattern = Field(settings.FilenamePattern);
         _copyToClipboard = Toggle(settings.CopyToClipboard);
         _watchClipboard = Toggle(settings.WatchClipboard);
         _startWithWindows = Toggle(StartupRegistration.IsEnabled());
+        _closeToTray = Toggle(settings.CloseToTray);
         _limit = Pick(new[] { "5 条", "8 条", "12 条", "16 条", "20 条", "30 条" }, LimitIndex(settings.ClipboardLimit));
         _speed = Pick(Enumerable.Range(1, 10).Select(value => value + " 级").ToArray(), Math.Clamp(settings.ScrollSpeed, 1, 10) - 1);
         _sample = Pick(new[] { "60 ms", "80 ms", "120 ms", "160 ms", "200 ms", "300 ms" }, SampleIndex(settings.SampleMilliseconds));
@@ -113,6 +115,7 @@ internal sealed class SettingsForm : ShellForm
         {
             ("外观", _appearance),
             ("开机自动启动", _startWithWindows),
+            ("关闭窗口后常驻托盘", _closeToTray),
         });
 
         var stamp = new Label
@@ -186,6 +189,7 @@ internal sealed class SettingsForm : ShellForm
         settings.ScrollSpeed = form._speed.SelectedIndex + 1;
         settings.SampleMilliseconds = SampleValue(form._sample.SelectedIndex);
         settings.LaunchAtStartup = form._startWithWindows.Checked;
+        settings.CloseToTray = form._closeToTray.Checked;
         settings.Appearance = form._appearance.SelectedIndex switch
         {
             1 => "Light",
@@ -259,7 +263,8 @@ internal sealed class SettingsForm : ShellForm
         titleLabel.SetBounds(S(18), S(12), width - S(36), S(20));
         card.Controls.Add(titleLabel);
 
-        var labelWidth = S(116);
+        // Wide enough for the longest label ("关闭窗口后常驻托盘") to stay on one line.
+        var labelWidth = S(136);
         for (var i = 0; i < rows.Length; i++)
         {
             var y = header + (i * rowHeight);
@@ -370,6 +375,7 @@ internal sealed class SettingsForm : ShellForm
         _pattern.Text = AppSettings.DefaultFilenamePattern;
         _copyToClipboard.Checked = true;
         _watchClipboard.Checked = true;
+        _closeToTray.Checked = true;
         _limit.SelectedIndex = LimitIndex(12);
         _speed.SelectedIndex = 0;
         _sample.SelectedIndex = SampleIndex(120);

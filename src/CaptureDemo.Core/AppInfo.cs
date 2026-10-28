@@ -9,7 +9,9 @@ namespace CaptureDemo.Core;
 /// </summary>
 public static class AppInfo
 {
-    public const string Product = "CaptureDemo";
+    /// <summary>User-facing product name. Internal namespaces and the exe file name
+    /// stay CaptureDemo, so existing shortcuts and autostart entries keep working.</summary>
+    public const string Product = "Capture";
 
     /// <summary>Marketing version, e.g. <c>1.2.0</c>. Never carries build metadata.</summary>
     public static string Version { get; } = Read();
