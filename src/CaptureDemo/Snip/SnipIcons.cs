@@ -63,6 +63,35 @@ internal static class SnipIcons
 
     private static readonly string[] ArrowPaths = { "M4.5 19.5 19 5", "M19 5h-6.8", "M19 5v6.8" };
 
+    /// <summary>Classic pointer: the unmistakable "pick and move" metaphor.</summary>
+    private static readonly string[] SelectPaths =
+    {
+        "M6.4 3.4 6.4 18.6 10.1 15.1 12.6 20.6 15.2 19.4 12.7 14 17.6 13.6z",
+    };
+
+    private static readonly string[] LinePaths = { "M4.8 19.2 19.2 4.8" };
+
+    private static readonly string[] ShapeRectPaths =
+    {
+        // Square corners, so it does not read as the rounded variant at 16 px.
+        "M4.5 4.5h15v15h-15z",
+    };
+
+    private static readonly string[] ShapeRoundRectPaths =
+    {
+        "M10.5 4.5h3a6 6 0 0 1 6 6v3a6 6 0 0 1-6 6h-3a6 6 0 0 1-6-6v-3a6 6 0 0 1 6-6z",
+    };
+
+    private static readonly string[] ShapeEllipsePaths =
+    {
+        "M4.5 12a7.6 5.4 0 1 0 15.2 0a7.6 5.4 0 1 0-15.2 0z",
+    };
+
+    private static readonly string[] ShapeCirclePaths =
+    {
+        "M4.4 12a7.6 7.6 0 1 0 15.2 0a7.6 7.6 0 1 0-15.2 0z",
+    };
+
     private static readonly string[] HighlightPaths =
     {
         "M8.8 16.2 16.6 8.4a1.9 1.9 0 0 1 2.7 0l.7.7a1.9 1.9 0 0 1 0 2.7l-7.8 7.8H8.8z",
@@ -177,6 +206,18 @@ internal static class SnipIcons
     public static void Pen(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, PenPaths);
 
     public static void Arrow(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, ArrowPaths);
+
+    public static void Select(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, SelectPaths);
+
+    public static void Line(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, LinePaths);
+
+    public static void ShapeRect(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, ShapeRectPaths);
+
+    public static void ShapeRoundRect(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, ShapeRoundRectPaths);
+
+    public static void ShapeEllipse(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, ShapeEllipsePaths);
+
+    public static void ShapeCircle(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, ShapeCirclePaths);
 
     public static void Highlight(Graphics g, Rectangle r, Color color) => Stroke(g, r, color, HighlightPaths);
 

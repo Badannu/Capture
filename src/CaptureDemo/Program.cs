@@ -89,6 +89,13 @@ internal static class Program
             return;
         }
 
+        if (args.Length >= 1 && args[0].TrimStart('-', '/').Equals("bench", StringComparison.OrdinalIgnoreCase))
+        {
+            ApplicationConfiguration.Initialize();
+            Dev.AnnoBench.Run(args.Length > 1 ? args[1] : "bench.txt");
+            return;
+        }
+
         if (args.Length >= 8 && args[0].TrimStart('-', '/').Equals("crop", StringComparison.OrdinalIgnoreCase))
         {
             Dev.RenderPreview.Crop(

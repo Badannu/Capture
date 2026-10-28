@@ -1,3 +1,4 @@
+using System.Drawing.Imaging;
 using CaptureDemo.Core;
 
 namespace CaptureDemo.Snip;
@@ -6,18 +7,25 @@ internal sealed class SnipSession
 {
     private readonly AppSettings _settings;
     private readonly TaskCompletionSource<SnipResult> _done = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly List<AnnotateStroke> _strokes = new();
     private SnipOverlayForm? _overlay;
     private CapturePillForm? _toolbar;
     private AnnoPillForm? _anno;
+    private AnnoLayerForm? _layer;
     private LowLevelInputHook? _hook;
     private BgraBuffer? _base;
-    private Bitmap? _view;
-    private List<Point>? _draft;
     private Point? _down;
     private readonly List<Point> _lasso = new();
     private SnipMode _mode = SnipMode.Rectangle;
     private AnnoTool _tool = AnnoTool.Pen;
+    private AnnoItem? _ink;
+    private AnnoItem? _selected;
+    private AnnoHandle _dragHandle;
+    private Point _dragOrigin;
+    private int[] _dragXs = Array.Empty<int>();
+    private int[] _dragYs = Array.Empty<int>();
+    private Rectangle _dragBounds;
+    private int _color = AnnoPalette.Colors[AnnoPalette.Default].ToArgb();
+    private float _weight = AnnoPalette.Weights[1];
     private Rectangle _work;
     private Rectangle _selection;
     private string _kind = "rect";
@@ -93,9 +101,13 @@ internal sealed class SnipSession
         var bar = new AnnoPillForm();
         bar.LongShot += () => Finish(CaptureOutcome.Cancelled(), SnipFollow.Long, _selection);
         bar.ToolChosen += SetTool;
+        bar.ColorChosen += ApplyColor;
+        bar.WeightChosen += ApplyWeight;
         bar.UndoClicked += Undo;
         bar.ConfirmClicked += Confirm;
         bar.DiscardClicked += () => Finish(CaptureOutcome.Cancelled("已放弃，没有保存。"), SnipFollow.None, null);
+        bar.SetColor(_color);
+        bar.SetWeight(_weight);
         _anno = bar;
     }
 
@@ -103,6 +115,37 @@ internal sealed class SnipSession
     {
         _tool = tool;
         _anno?.SetTool(tool);
+        // Leaving a drawing tool mid-drag would strand a half-finished shape.
+        if (_ink != null)
+        {
+            EndDraw();
+        }
+
+        if (tool != AnnoTool.Select && _layer != null)
+        {
+            _layer.Selected = null;
+            _selected = null;
+        }
+    }
+
+    private void ApplyColor(int argb)
+    {
+        _color = argb;
+        if (_selected != null)
+        {
+            _selected.ColorArgb = argb;
+            _layer?.Redraw(Rectangle.Inflate(_selected.Bounds, 24, 24));
+        }
+    }
+
+    private void ApplyWeight(float weight)
+    {
+        _weight = weight;
+        if (_selected != null)
+        {
+            _selected.Width = weight * Scale;
+            _layer?.Redraw(Rectangle.Inflate(_selected.Bounds, 24, 24));
+        }
     }
 
     private void SelectMode(SnipMode mode)
@@ -179,34 +222,51 @@ internal sealed class SnipSession
         _selection = screen;
         _kind = kind;
         _base = buffer;
-        _strokes.Clear();
-        _draft = null;
+        _ink = null;
+        _selected = null;
+        _dragHandle = AnnoHandle.None;
         _editing = true;
         _down = null;
+
+        // Freeze the capture once. Everything after this point is incremental ink on top of it.
+        // The bitmap's ownership passes to the layer, which disposes it with the window.
+        var frozen = BgraConvert.ToBitmap(buffer);
+        _overlay?.ShowFrozen(screen, frozen);
+
         EnsureAnno();
         SetTool(AnnoTool.Pen);
+        _layer ??= new AnnoLayerForm();
+        _layer.Attach(frozen, screen);
+
+        // The annotation layer covers the whole selection, so the bar has to be lifted above it.
         _anno!.Place(_work, screen);
         if (!_anno.Visible)
         {
             _anno.Show();
         }
 
-        Repaint();
+        _anno.BringToFront();
     }
 
     private void LeaveEditor()
     {
         _editing = false;
-        _draft = null;
-        _strokes.Clear();
+        _ink = null;
+        _selected = null;
+        _dragHandle = AnnoHandle.None;
         _base = null;
-        _view?.Dispose();
-        _view = null;
+        if (_layer is { Visible: true })
+        {
+            _layer.Hide();
+        }
+
         if (_anno is { Visible: true })
         {
             _anno.Hide();
         }
     }
+
+    private float Scale => _layer?.ScreenScale ?? 1f;
 
     private void OnMove(Point screen)
     {
@@ -228,41 +288,24 @@ internal sealed class SnipSession
 
         if (_editing)
         {
-            if (_draft == null || _down == null)
+            if (_tool == AnnoTool.Select)
+            {
+                MoveSelect(ToImage(screen));
+                return;
+            }
+
+            if (_ink == null)
             {
                 return;
             }
 
-            var image = ToImage(screen);
-            if (_tool == AnnoTool.Pen)
-            {
-                var last = _draft[^1];
-                if (ScreenRects.DistanceSquared(last, image) >= 4)
-                {
-                    _draft.Add(image);
-                    Repaint();
-                }
-            }
-            else
-            {
-                if (_draft.Count == 1)
-                {
-                    _draft.Add(image);
-                }
-                else
-                {
-                    _draft[^1] = image;
-                }
-
-                Repaint();
-            }
-
+            ExtendDraw(ToImage(screen));
             return;
         }
 
         if (_mode == SnipMode.Rectangle && _down is Point anchor)
         {
-                _overlay?.ShowHole(_work, ScreenRects.Normalize(anchor, screen), "");
+            _overlay?.ShowHole(_work, ScreenRects.Normalize(anchor, screen), "");
             return;
         }
 
@@ -305,13 +348,20 @@ internal sealed class SnipSession
         _cursor = screen;
         if (_editing)
         {
-            if (!_selection.Contains(screen) || _base == null)
+            if (!_selection.Contains(screen) || _layer == null)
             {
                 return;
             }
 
+            var image = ToImage(screen);
             _down = screen;
-            _draft = new List<Point> { ToImage(screen) };
+            if (_tool == AnnoTool.Select)
+            {
+                StartSelect(image);
+                return;
+            }
+
+            StartDraw(image);
             return;
         }
 
@@ -335,7 +385,15 @@ internal sealed class SnipSession
 
         if (_editing)
         {
-            CommitDraft();
+            if (_tool == AnnoTool.Select)
+            {
+                EndSelect();
+            }
+            else
+            {
+                EndDraw();
+            }
+
             _down = null;
             return;
         }
@@ -408,106 +466,170 @@ internal sealed class SnipSession
         }
     }
 
-    private void CommitDraft()
+    private void StartDraw(Point image)
     {
-        if (_draft == null || _draft.Count == 0)
+        _ink = _tool switch
         {
-            _draft = null;
+            AnnoTool.Pen or AnnoTool.Highlight or AnnoTool.Mosaic => new AnnoItem(_tool, new[] { image.X }, new[] { image.Y }),
+            _ => AnnoItem.FromDrag(_tool, image, image),
+        };
+        _ink.ColorArgb = _color;
+        _ink.Width = _weight * Scale;
+        _layer!.Draft = _ink;
+    }
+
+    private void ExtendDraw(Point image)
+    {
+        var last = new Point(_ink!.Xs[^1], _ink.Ys[^1]);
+        if (ScreenRects.DistanceSquared(last, image) < 4)
+        {
             return;
         }
 
-        var keep = _tool switch
+        if (_ink.IsFreehand)
         {
-            AnnoTool.Pen => true,
-            AnnoTool.Arrow => _draft.Count >= 2 && ScreenRects.DistanceSquared(_draft[0], _draft[^1]) >= 16,
-            _ => _draft.Count >= 2 && SpanAtLeast(_draft, 4),
-        };
-        if (keep)
-        {
-            _strokes.Add(new AnnotateStroke
-            {
-                Kind = _tool switch
-                {
-                    AnnoTool.Arrow => AnnotateKind.Arrow,
-                    AnnoTool.Highlight => AnnotateKind.Highlight,
-                    AnnoTool.Mosaic => AnnotateKind.Mosaic,
-                    _ => AnnotateKind.Pen,
-                },
-                Xs = _draft.Select(p => p.X).ToArray(),
-                Ys = _draft.Select(p => p.Y).ToArray(),
-            });
+            _ink.Append(image.X, image.Y);
+            // Repaint only the segment just laid down, not the whole stroke.
+            var segment = Rectangle.Union(
+                new Rectangle(last.X, last.Y, 1, 1),
+                new Rectangle(image.X, image.Y, 1, 1));
+            var pad = (int)Math.Ceiling(Math.Max(_ink.Width * (_tool == AnnoTool.Highlight ? 3.4f : 1f), 6f) / 2f) + 3;
+            _layer!.Redraw(Rectangle.Inflate(segment, pad, pad));
+            return;
         }
 
-        _draft = null;
-        Repaint();
+        var before = _ink.InkBounds;
+        _ink.SetEnd(image.X, image.Y);
+        _layer!.Redraw(Rectangle.Union(before, _ink.InkBounds));
+    }
+
+    private void EndDraw()
+    {
+        if (_ink == null)
+        {
+            return;
+        }
+
+        var item = _ink;
+        _ink = null;
+        if (item.IsDegenerate)
+        {
+            _layer!.Draft = null;
+            return;
+        }
+
+        _layer!.CommitDraft(item);
+    }
+
+    private void StartSelect(Point image)
+    {
+        var grip = (int)Math.Ceiling(6 * Scale);
+        if (_selected != null)
+        {
+            var handle = _selected.HandleAt(image, grip);
+            if (handle != AnnoHandle.None)
+            {
+                BeginDrag(_selected, handle, image);
+                return;
+            }
+        }
+
+        var hit = _layer!.HitTest(image, grip);
+        _layer.Selected = hit;
+        _selected = hit;
+        if (hit == null)
+        {
+            _dragHandle = AnnoHandle.None;
+            return;
+        }
+
+        BeginDrag(hit, AnnoHandle.Body, image);
+    }
+
+    private void BeginDrag(AnnoItem item, AnnoHandle handle, Point image)
+    {
+        _dragHandle = handle;
+        _dragOrigin = image;
+        _dragBounds = item.Bounds;
+        _dragXs = (int[])item.Xs.Clone();
+        _dragYs = (int[])item.Ys.Clone();
+        // The dashed frame sits outside the ink, so the old frame needs clearing too.
+        _layer?.Redraw(Rectangle.Inflate(_dragBounds, 24, 24));
+    }
+
+    private void MoveSelect(Point image)
+    {
+        if (_dragHandle == AnnoHandle.None || _selected == null)
+        {
+            return;
+        }
+
+        var dx = image.X - _dragOrigin.X;
+        var dy = image.Y - _dragOrigin.Y;
+        var before = Rectangle.Inflate(_selected.Bounds, 24, 24);
+
+        // Rebuild from the drag-start snapshot: repeated relative edits on a freehand path
+        // accumulate rounding error and the stroke slowly drifts away from the pointer.
+        _selected.SetPoints(_dragXs, _dragYs);
+        if (_dragHandle == AnnoHandle.Body)
+        {
+            _selected.Move(dx, dy);
+        }
+        else
+        {
+            _selected.DragHandle(_dragHandle, new Point(dx, dy));
+        }
+
+        _layer?.Redraw(Rectangle.Union(before, Rectangle.Inflate(_selected.Bounds, 24, 24)));
+    }
+
+    private void EndSelect()
+    {
+        if (_dragHandle == AnnoHandle.None)
+        {
+            return;
+        }
+
+        _dragHandle = AnnoHandle.None;
+        _layer?.Redraw(_selected == null ? null : Rectangle.Inflate(_selected.Bounds, 24, 24));
     }
 
     private void Undo()
     {
-        if (_draft != null)
+        if (_ink != null)
         {
-            _draft = null;
-            _down = null;
-            Repaint();
+            _ink = null;
+            _layer!.Draft = null;
             return;
         }
 
-        if (_strokes.Count > 0)
+        if (_layer != null && _layer.Selected != null)
         {
-            _strokes.RemoveAt(_strokes.Count - 1);
-            Repaint();
+            _layer.Remove(_layer.Selected);
+            _selected = null;
+            return;
         }
+
+        _layer?.RemoveLast();
     }
 
     private void Confirm()
     {
-        if (_base == null)
+        if (!_editing || _layer == null)
         {
             return;
         }
 
-        CommitDraft();
-        var composed = AnnotationComposer.Apply(_base, _strokes);
-        using var bitmap = BgraConvert.ToBitmap(composed);
+        EndDraw();
+        using var bitmap = new Bitmap(_selection.Width, _selection.Height, PixelFormat.Format32bppPArgb);
+        using (var g = Graphics.FromImage(bitmap))
+        {
+            _layer.RenderTo(g);
+        }
+
         var saved = CaptureSaver.SavePng(bitmap, _kind, _settings);
         var clip = CaptureSaver.ClipboardPhrase(_settings, saved.CopiedToClipboard);
         Finish(CaptureOutcome.Saved(saved.Path, "已保存。" + clip), SnipFollow.None, null);
-    }
-
-    private void Repaint()
-    {
-        if (_base == null || _overlay == null)
-        {
-            return;
-        }
-
-        IReadOnlyList<AnnotateStroke> strokes = _strokes;
-        if (_draft is { Count: > 0 })
-        {
-            var extra = new AnnotateStroke
-            {
-                Kind = _tool switch
-                {
-                    AnnoTool.Arrow => AnnotateKind.Arrow,
-                    AnnoTool.Highlight => AnnotateKind.Highlight,
-                    AnnoTool.Mosaic => AnnotateKind.Mosaic,
-                    _ => AnnotateKind.Pen,
-                },
-                Xs = _draft.Select(p => p.X).ToArray(),
-                Ys = _draft.Select(p => p.Y).ToArray(),
-            };
-            var both = new List<AnnotateStroke>(_strokes.Count + 1);
-            both.AddRange(_strokes);
-            both.Add(extra);
-            strokes = both;
-        }
-
-        var composed = AnnotationComposer.Apply(_base, strokes);
-        var next = BgraConvert.ToBitmap(composed);
-        var previous = _view;
-        _view = next;
-        _overlay.ShowFrozen(_selection, next);
-        previous?.Dispose();
     }
 
     private void PaintSelecting(string hint)
@@ -564,12 +686,6 @@ internal sealed class SnipSession
         return Rectangle.FromLTRB(left, top, right + 1, bottom + 1);
     }
 
-    private static bool SpanAtLeast(List<Point> points, int min)
-    {
-        var rect = BoundsOf(points);
-        return rect.Width >= min && rect.Height >= min;
-    }
-
     private static Point CursorOrZero()
     {
         if (NativeMethods.GetCursorPos(out var point))
@@ -608,8 +724,12 @@ internal sealed class SnipSession
 
         _hook?.Dispose();
         _hook = null;
-        _view?.Dispose();
-        _view = null;
+        if (_layer is { IsDisposed: false })
+        {
+            _layer.Dispose();
+        }
+
+        _layer = null;
         if (_anno is { IsDisposed: false })
         {
             _anno.Dispose();

@@ -121,12 +121,17 @@ CaptureDemo-handoff-YYYYMMDD/
 
 选区确认后（全屏则在画面底），选区下出现 **同风格标注胶囊**：
 
-顺序大致： **长截图（第二入口）** → 画笔 → 箭头 → 高亮 → 马赛克 → 撤销 → **✓** → **✗**
+顺序（五组，靠 gap 分隔）：
+
+**长截图** ｜ 选择 · 画笔 · 直线 · 箭头 ｜ 矩形 · 圆角矩形 · 椭圆 · 圆 ｜ 高亮 · 马赛克 ｜ 颜色 · 粗细 · 撤销 · **✓** · **✗**
 
 - 只有 **✓** 才按设置写 PNG（默认可同时复制剪贴板）。  
 - **✗ / Esc** 丢弃，不落盘。  
 - 标注条「长截图」用 **当前矩形** 直接进入滚动会话（任意形状用外接矩形）。  
-- 画笔/箭头红细线；高亮半透明黄；马赛克块化；撤销丢最后一笔（从原图重放笔划列表）。
+- 十种工具：`Select / Pen / Line / Arrow / Rect / RoundRect / Ellipse / Circle / Highlight / Mosaic`。自由笔画是采样路径，其余是"拖对角即定形"，`Circle` 强制正圆。  
+- 八色预设 + 四档粗细，**不做色盘**。改色/改粗细会同时作用于当前选中对象。  
+- **选择工具**：单击命中 → 框内拖动＝移动，八个手柄＝自由缩放（线宽不随缩放变化）。拖动时每帧从拖动起点快照重建几何，避免自由笔画反复相对变换累积取整误差。  
+- 标注模型在 `CaptureDemo.Core/AnnoItem.cs`（纯几何：Bounds / Move / SetBounds / DragHandle / HitTest / Clone），不含任何绘制代码，可单测。
 
 模式细节：
 
@@ -183,8 +188,10 @@ MainForm（热键、托盘、主壳）
   └─ SnipSession
        SnipOverlayForm（暗角）
        CapturePillForm / PillChrome（顶栏六模式）
-       AnnoPillForm（标注条）
-       ├─ 全屏/矩形/窗口/任意形状 → AnnotationComposer → ✓ SavePng
+       AnnoPillForm（标注条）+ StylePillForm（色板/粗细浮层）
+       AnnoLayerForm（覆盖选区的标注层，脏矩形增量渲染）
+         └─ AnnoPainter（GDI+，预览与导出同一份绘制）
+       ├─ 全屏/矩形/窗口/任意形状 → AnnoLayerForm.RenderTo → ✓ SavePng
        ├─ 长截图 → LongCaptureSession
        └─ 元素 → ElementCaptureSession
   LongCaptureSession
@@ -249,7 +256,7 @@ powershell -ExecutionPolicy Bypass -File .\run-long.ps1
 dotnet test
 ```
 
-当前约 **32** 个单测（设置、热键解析、标注、拼接、WheelPace、PillMetrics 等）。**真实蒙版/钩子/滚轮必须在 Windows 手工验。**
+当前 **69** 个单测（设置、热键解析、标注几何与命中、剪贴板历史、拼接、WheelPace、PillMetrics 等）。**真实蒙版/钩子/滚轮必须在 Windows 手工验。**
 
 ---
 
@@ -299,6 +306,12 @@ dotnet test
 | `SvgPath` 变换用 `MatrixOrder.Append` | GDI+ 默认 Prepend 会让 offset 被 scale 再乘一次，大尺寸图标直接飞出画布（曾导致下拉箭头画在裁剪区外看不见） |
 | 分层窗口上的文字用 GDI+ `DrawString` + `AntiAliasGridFit` | GDI ClearType 在预乘 alpha 面上有彩边 |
 | 悬浮面板截图校验用 `CopyFromScreen` | `DrawToBitmap`/`WM_PRINT` 对透明自绘面板产出空白 |
+| 标注层是**独立窗口，尺寸＝选区**，不再复用全屏暗角窗 | 全屏窗每帧要重铺整幅遮罩 + 全幅 `UpdateLayeredWindow`，1080p 下光提交就 ~3 ms，多屏更差 |
+| 标注预览走 **脏矩形增量**，不再每帧 CPU 全图重合成 | 旧路径每帧 `AnnotationComposer.Apply` + 全幅转位图 + 全屏提交，画笔 10 ms/帧、马赛克 25 ms/帧；拖动明显发涩。现为画笔 0.25 ms、图形 0.9 ms |
+| 预览与导出**共用 `AnnoPainter`（GDI+）** | 之前预览与导出是两条绘制实现，容易"看到的不等于存下的" |
+| `LayeredSurface` 缓存 DC/DIB 像素指针 | 旧 `LayeredWindow.Update` 每次都 `CreateDIBSection` + 逐行 `Marshal.Copy`（每行还新分配 byte[]） |
+| 标注层拖动几何**每帧从起点快照重建** | 相对变换连乘会让自由笔画慢慢漂离指针 |
+| 色板/粗细用**预设**，不做色盘 | 截图标注要的是快，不是全色域 |
 
 用户反馈截图/视频曾保存在开发机 `capture-demo-feedback*`，本交接包未强制附带；需要视觉回归时可向负责人再要 Windows 截图工具顶栏参考图。
 
@@ -308,7 +321,9 @@ dotnet test
 
 产品未最终冻结，常见下一刀（**先问 Guth 或按其新反馈**，勿擅自扩 scope）：
 
-已完成（本机这一轮）：图标改为 24 网格 SVG 统一权重、设置页 Fluent 卡片化 + 自绘 `Picker`/`ToggleSwitch`、剪贴板历史、单实例、开机自启、深浅色主题、`--ui-demo` / `--preview` / `--crop` 三个 dev 校验钩子。
+已完成（此前几轮）：图标改为 24 网格 SVG 统一权重、设置页 Fluent 卡片化 + 自绘 `Picker`/`ToggleSwitch`、剪贴板历史、单实例、开机自启、深浅色主题、`--ui-demo` / `--preview` / `--crop` 三个 dev 校验钩子。
+
+已完成（标注重构这一轮）：标注层独立窗口 + 脏矩形增量渲染（画笔 10→0.25 ms/帧）、十种标注工具（选择/画笔/直线/箭头/矩形/圆角矩形/椭圆/圆/高亮/马赛克）、八色预设 + 四档粗细、选择工具移动与八手柄自由缩放、`--bench` 性能基准 + `layer-shot.png` 实机证据。
 
 仍未做：
 
@@ -332,8 +347,13 @@ dotnet test
 7. 设置改热键/目录 → 退出再开仍在；无文字截断/重叠；四个下拉都有 chevron，开关与输入框左边缘对齐。  
 8. 托盘右键：七项都有图标，右侧热键是灰色；「剪贴板」能开面板。  
 9. 剪贴板：复制图片/文本/文件各一条 → 双击文本回剪贴板、双击图片开「照片」→ 右键二级菜单项齐全 → 置顶后仍排首位。  
-10. `dotnet test` 全绿。  
-11. UI 大纲改动后跑一遍 `CaptureDemo.exe --ui-demo <folder>`，五张图（main/settings/clipboard/tray/clipmenu，深浅各一）都要看过再提交。
+10. **标注**：矩形选 800×600 以上的区域，用画笔快速划几下，笔迹要跟手、不掉帧、不断线；再拖一个椭圆和箭头，形状终点要严丝合缝跟着指针。  
+11. **标注**：切到选择工具，单击任一标注出现虚线框 + 八个手柄；拖动移动、拖角缩放都跟手；按撤销删掉这一条。  
+12. **标注**：点颜色换绿、点粗细换特粗，新画的线立即生效；选中已有标注再改色，改的是那一条。  
+13. **标注**：✓ 存出的 PNG 与屏幕上看到的一致（颜色、线宽、马赛克位置）。  
+14. `dotnet test` 全绿（当前 69 个）。  
+15. UI/标注改动后跑 `CaptureDemo.exe --ui-demo <folder>`，`main/settings/clipboard/tray/clipmenu/anno/anno-colors/anno-weights/anno-sample`（深浅各一）都要看过再提交。  
+16. 改渲染路径后跑 `CaptureDemo.exe --bench <报告.txt>`，确认画笔单帧仍在 1 ms 量级，并打开它顺带生成的 `layer-shot.png` 确认标注层真的显示在屏幕上。
 
 ---
 

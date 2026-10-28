@@ -17,6 +17,8 @@ internal abstract class ScreenOverlayForm : Form
     public const byte DimAlpha = 153;
 
     private Bitmap? _surface;
+    private byte[]? _dimBuffer;
+    private byte[] _dimPixel = Array.Empty<byte>();
 
     protected ScreenOverlayForm()
     {
@@ -186,24 +188,55 @@ internal abstract class ScreenOverlayForm : Form
 
         _surface?.Dispose();
         _surface = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
+        _dimBuffer = null;
     }
 
-    private static void Fill(Bitmap bitmap, byte blue, byte green, byte red, byte alpha)
+    /// <summary>
+    /// One premultiplied row is 4 bytes per pixel, so the whole dim layer is a single repeated
+    /// row. Building it once and copying it in one go beats a per-row marshal loop on every
+    /// pointer move, which is what made region select feel heavy on large desktops.
+    /// </summary>
+    private void Fill(Bitmap bitmap, byte blue, byte green, byte red, byte alpha)
     {
         var preBlue = (byte)(blue * alpha / 255);
         var preGreen = (byte)(green * alpha / 255);
         var preRed = (byte)(red * alpha / 255);
-        var row = new byte[bitmap.Width * 4];
-        for (var x = 0; x < bitmap.Width; x++)
+        var length = bitmap.Width * bitmap.Height * 4;
+        var buffer = _dimBuffer;
+        if (buffer == null || buffer.Length != length || _dimPixel.Length != 4 ||
+            _dimPixel[0] != preBlue || _dimPixel[1] != preGreen || _dimPixel[2] != preRed || _dimPixel[3] != alpha)
         {
-            var i = x * 4;
-            row[i] = preBlue;
-            row[i + 1] = preGreen;
-            row[i + 2] = preRed;
-            row[i + 3] = alpha;
+            buffer = new byte[length];
+            for (var x = 0; x < bitmap.Width; x++)
+            {
+                var i = x * 4;
+                buffer[i] = preBlue;
+                buffer[i + 1] = preGreen;
+                buffer[i + 2] = preRed;
+                buffer[i + 3] = alpha;
+            }
+
+            for (var y = 1; y < bitmap.Height; y++)
+            {
+                Buffer.BlockCopy(buffer, 0, buffer, y * bitmap.Width * 4, bitmap.Width * 4);
+            }
+
+            _dimBuffer = buffer;
+            _dimPixel = new[] { preBlue, preGreen, preRed, alpha };
         }
 
-        BlitRows(bitmap, new Rectangle(0, 0, bitmap.Width, bitmap.Height), row, bitmap.Width, ImageLockMode.WriteOnly);
+        var data = bitmap.LockBits(
+            new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+            ImageLockMode.WriteOnly,
+            PixelFormat.Format32bppPArgb);
+        try
+        {
+            Marshal.Copy(buffer, 0, data.Scan0, length);
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
     }
 
     protected static void ClearRect(Bitmap bitmap, Rectangle rect)

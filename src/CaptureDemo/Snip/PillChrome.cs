@@ -71,6 +71,29 @@ internal static class PillDraw
         }
 
         LayeredWindow.Update(form.Handle, form.Location, bitmap);
+
+        // Keeping the last frame lets the dev preview read the real pixels instead of
+        // screen-grabbing a layered window, which yields an empty rectangle.
+        if (Snapshots.TryGetValue(form, out var previous))
+        {
+            previous.Dispose();
+        }
+
+        Snapshots[form] = (Bitmap)bitmap.Clone();
+    }
+
+    private static readonly Dictionary<Form, Bitmap> Snapshots = new();
+
+    /// <summary>Last frame this form presented, or null if it has not rendered yet.</summary>
+    public static Bitmap? Snapshot(Form form) =>
+        Snapshots.TryGetValue(form, out var bitmap) && !form.IsDisposed ? (Bitmap)bitmap.Clone() : null;
+
+    public static void Forget(Form form)
+    {
+        if (Snapshots.Remove(form, out var bitmap))
+        {
+            bitmap.Dispose();
+        }
     }
 }
 
@@ -382,6 +405,7 @@ internal sealed class CapturePillForm : LayeredChromeForm
     {
         if (disposing)
         {
+            PillDraw.Forget(this);
             _tip.Dispose();
         }
 
@@ -518,232 +542,3 @@ internal sealed class CapturePillForm : LayeredChromeForm
     }
 }
 
-internal sealed class AnnoPillForm : LayeredChromeForm
-{
-    private const int LongId = 10;
-    private const int PenId = 11;
-    private const int ArrowId = 12;
-    private const int HighlightId = 13;
-    private const int MosaicId = 14;
-    private const int UndoId = 15;
-    private const int SaveId = 16;
-    private const int DiscardId = 17;
-
-    private readonly PillTipForm _tip = new();
-    private int _hover;
-    private AnnoTool _tool = AnnoTool.Pen;
-    private int[] _widths = Array.Empty<int>();
-    private int[] _ids = Array.Empty<int>();
-
-    public event Action? LongShot;
-
-    public event Action<AnnoTool>? ToolChosen;
-
-    public event Action? UndoClicked;
-
-    public event Action? ConfirmClicked;
-
-    public event Action? DiscardClicked;
-
-    public void SetTool(AnnoTool tool)
-    {
-        _tool = tool;
-        if (Visible)
-        {
-            Render();
-        }
-    }
-
-    protected override void Relayout()
-    {
-        var button = S(PillMetrics.Button);
-        var gap = S(PillMetrics.Gap);
-        _widths = new[] { button, gap, button, button, button, button, button, gap, button, button };
-        _ids = new[] { LongId, 0, PenId, ArrowId, HighlightId, MosaicId, UndoId, 0, SaveId, DiscardId };
-        var shadow = S(PillMetrics.Shadow);
-        ClientSize = new Size(PillMetrics.ContentWidth(S(PillMetrics.Pad), _widths) + shadow * 2, S(PillMetrics.BarHeight) + shadow * 2);
-    }
-
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        var hit = Hit(e.Location);
-        Cursor = hit == 0 ? Cursors.Default : Cursors.Hand;
-        if (hit != _hover)
-        {
-            _hover = hit;
-            Render();
-            ShowTip(hit);
-        }
-
-        base.OnMouseMove(e);
-    }
-
-    protected override void OnMouseLeave(EventArgs e)
-    {
-        _hover = 0;
-        _tip.Hide();
-        Render();
-        base.OnMouseLeave(e);
-    }
-
-    protected override void OnMouseUp(MouseEventArgs e)
-    {
-        switch (Hit(e.Location))
-        {
-            case LongId:
-                LongShot?.Invoke();
-                break;
-            case PenId:
-                Choose(AnnoTool.Pen);
-                break;
-            case ArrowId:
-                Choose(AnnoTool.Arrow);
-                break;
-            case HighlightId:
-                Choose(AnnoTool.Highlight);
-                break;
-            case MosaicId:
-                Choose(AnnoTool.Mosaic);
-                break;
-            case UndoId:
-                UndoClicked?.Invoke();
-                break;
-            case SaveId:
-                ConfirmClicked?.Invoke();
-                break;
-            case DiscardId:
-                DiscardClicked?.Invoke();
-                break;
-        }
-
-        base.OnMouseUp(e);
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _tip.Dispose();
-        }
-
-        base.Dispose(disposing);
-    }
-
-    private void Choose(AnnoTool tool)
-    {
-        _tool = tool;
-        Render();
-        ToolChosen?.Invoke(tool);
-    }
-
-    private int Hit(Point point) => PillMetrics.Hit(point.X, point.Y, S(PillMetrics.Shadow), S(PillMetrics.BarHeight), S(PillMetrics.Pad), _widths, _ids);
-
-    private void ShowTip(int hit)
-    {
-        var text = hit switch
-        {
-            LongId => "长截图",
-            PenId => "画笔",
-            ArrowId => "箭头",
-            HighlightId => "高亮",
-            MosaicId => "马赛克",
-            UndoId => "撤销",
-            SaveId => "保存",
-            DiscardId => "放弃",
-            _ => "",
-        };
-        if (text.Length == 0)
-        {
-            _tip.Hide();
-            return;
-        }
-
-        var shadow = S(PillMetrics.Shadow);
-        var cursor = shadow + S(PillMetrics.Pad);
-        Rectangle slot = Rectangle.Empty;
-        for (var i = 0; i < _ids.Length; i++)
-        {
-            if (_ids[i] == hit)
-            {
-                slot = new Rectangle(cursor, shadow, _widths[i], S(PillMetrics.BarHeight));
-                break;
-            }
-
-            cursor += _widths[i];
-        }
-
-        if (slot.Width < 2)
-        {
-            _tip.Hide();
-            return;
-        }
-
-        _tip.ShowUnder(RectangleToScreen(slot), text, Dpi);
-    }
-
-    protected override void Render()
-    {
-        if (!IsHandleCreated || _widths.Length == 0)
-        {
-            return;
-        }
-
-        var shadow = S(PillMetrics.Shadow);
-        using var bitmap = new Bitmap(Math.Max(1, Width), Math.Max(1, Height), PixelFormat.Format32bppPArgb);
-        using (var graphics = Graphics.FromImage(bitmap))
-        {
-            graphics.Clear(Color.Transparent);
-            var body = new Rectangle(shadow, shadow, Width - shadow * 2, S(PillMetrics.BarHeight));
-            DrawBar(graphics, body);
-            var cursor = body.Left + S(PillMetrics.Pad);
-            for (var i = 0; i < _widths.Length; i++)
-            {
-                var slot = new Rectangle(cursor, body.Top, _widths[i], body.Height);
-                var id = _ids[i];
-                if (id != 0 && _hover == id)
-                {
-                    using var hover = new SolidBrush(Color.FromArgb(28, 255, 255, 255));
-                    using var hoverPath = PillDraw.Round(Rectangle.Inflate(slot, -S(2), -S(4)), S(6));
-                    graphics.FillPath(hover, hoverPath);
-                }
-
-                Action<Graphics, Rectangle, Color>? icon = id switch
-                {
-                    LongId => SnipIcons.Long,
-                    PenId => SnipIcons.Pen,
-                    ArrowId => SnipIcons.Arrow,
-                    HighlightId => SnipIcons.Highlight,
-                    MosaicId => SnipIcons.Mosaic,
-                    UndoId => SnipIcons.Undo,
-                    SaveId => SnipIcons.Confirm,
-                    DiscardId => SnipIcons.Discard,
-                    _ => null,
-                };
-                if (icon != null)
-                {
-                    DrawIcon(graphics, icon, slot, Theme.SnipInk);
-                }
-
-                if (ToolId(_tool) == id)
-                {
-                    var line = new Rectangle(slot.Left + (slot.Width - S(14)) / 2, slot.Bottom - S(7), S(14), S(2));
-                    using var accent = new SolidBrush(Theme.SnipAccentLine);
-                    using var accentPath = PillDraw.Round(line, S(1));
-                    graphics.FillPath(accent, accentPath);
-                }
-
-                cursor += _widths[i];
-            }
-        }
-
-        PillDraw.Present(this, bitmap);
-    }
-
-    private static int ToolId(AnnoTool tool) => tool switch
-    {
-        AnnoTool.Arrow => ArrowId,
-        AnnoTool.Highlight => HighlightId,
-        AnnoTool.Mosaic => MosaicId,
-        _ => PenId,
-    };
-}

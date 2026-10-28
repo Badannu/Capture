@@ -78,7 +78,132 @@ internal static class UiDemo
                     panel.Hide();
                 }
             }
+
+            SaveAnnotationBar(folder, tag);
+            SaveAnnotationSample(folder, tag);
         }
+    }
+
+    private static void SaveAnnotationBar(string folder, string tag)
+    {
+        var work = Screen.FromPoint(Cursor.Position).WorkingArea;
+        using (var bar = new AnnoPillForm())
+        {
+            bar.Place(work, null);
+            bar.Show();
+            Pump();
+            SaveLayered(bar, Path.Combine(folder, $"anno-{tag}.png"));
+            bar.Hide();
+        }
+
+        using (var colors = new StylePillForm { AutoHide = false })
+        {
+            colors.ShowColors(AnnoPalette.Colors[0].ToArgb());
+            colors.Place(work, null);
+            colors.Show();
+            Pump();
+            SaveLayered(colors, Path.Combine(folder, $"anno-colors-{tag}.png"));
+            colors.Hide();
+        }
+
+        using (var weights = new StylePillForm { AutoHide = false })
+        {
+            weights.ShowWeights(AnnoPalette.Weights[2]);
+            weights.Place(work, null);
+            weights.Show();
+            Pump();
+            SaveLayered(weights, Path.Combine(folder, $"anno-weights-{tag}.png"));
+            weights.Hide();
+        }
+    }
+
+    /// <summary>
+    /// Every tool painted once onto a fake page, plus a selected item with its grips.
+    /// Exercises the same <see cref="AnnoPainter"/> the live overlay and the export use.
+    /// </summary>
+    private static void SaveAnnotationSample(string folder, string tag)
+    {
+        const int width = 900;
+        const int height = 500;
+        using var canvas = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
+        using (var g = Graphics.FromImage(canvas))
+        {
+            g.Clear(Color.FromArgb(246, 247, 249));
+            using var head = new SolidBrush(Color.FromArgb(24, 26, 32));
+            g.FillRectangle(head, 0, 0, width, 64);
+            using var title = new SolidBrush(Color.FromArgb(232, 236, 242));
+            g.FillRectangle(title, 32, 22, 180, 20);
+            using var line = new SolidBrush(Color.FromArgb(206, 212, 220));
+            for (var i = 0; i < 6; i++)
+            {
+                g.FillRectangle(line, 32, 108 + (i * 34), 380 - (i % 3 * 46), 12);
+            }
+
+            using var card = new SolidBrush(Color.FromArgb(255, 255, 255));
+            g.FillRectangle(card, 470, 96, 380, 300);
+            using var cardEdge = new Pen(Color.FromArgb(226, 230, 238));
+            g.DrawRectangle(cardEdge, 470, 96, 380, 300);
+            var noise = new Random(7);
+            for (var i = 0; i < 180; i++)
+            {
+                using var pixel = new SolidBrush(Color.FromArgb(
+                    60 + noise.Next(150),
+                    60 + noise.Next(150),
+                    60 + noise.Next(150)));
+                g.FillRectangle(pixel, 486 + noise.Next(330), 112 + noise.Next(268), 16, 16);
+            }
+        }
+
+        using var source = (Bitmap)canvas.Clone();
+        using (var g = Graphics.FromImage(canvas))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            var arrow = AnnoItem.FromDrag(AnnoTool.Arrow, new Point(300, 420), new Point(560, 150));
+            arrow.ColorArgb = AnnoPalette.Colors[0].ToArgb();
+            arrow.Width = 6.5f;
+            AnnoPainter.Draw(g, arrow, source);
+
+            var pen = new AnnoItem(
+                AnnoTool.Pen,
+                new[] { 60, 90, 130, 175, 215, 250 },
+                new[] { 300, 268, 318, 282, 330, 300 }) { ColorArgb = AnnoPalette.Colors[5].ToArgb(), Width = 6.5f };
+            AnnoPainter.Draw(g, pen, source);
+
+            var straight = AnnoItem.FromDrag(AnnoTool.Line, new Point(60, 380), new Point(250, 380));
+            straight.ColorArgb = AnnoPalette.Colors[4].ToArgb();
+            straight.Width = 4f;
+            AnnoPainter.Draw(g, straight, source);
+
+            var highlight = new AnnoItem(AnnoTool.Highlight, new[] { 30, 420 }, new[] { 232, 232 })
+            {
+                ColorArgb = AnnoPalette.Colors[2].ToArgb(),
+                Width = 6.5f,
+            };
+            AnnoPainter.Draw(g, highlight, source);
+
+            var circle = AnnoItem.FromDrag(AnnoTool.Circle, new Point(292, 118), new Point(392, 196));
+            circle.ColorArgb = AnnoPalette.Colors[3].ToArgb();
+            circle.Width = 4f;
+            AnnoPainter.Draw(g, circle, source);
+
+            var ellipse = AnnoItem.FromDrag(AnnoTool.Ellipse, new Point(70, 90), new Point(250, 170));
+            ellipse.ColorArgb = AnnoPalette.Colors[1].ToArgb();
+            ellipse.Width = 4f;
+            AnnoPainter.Draw(g, ellipse, source);
+
+            var mosaic = new AnnoItem(AnnoTool.Mosaic, new[] { 600, 760 }, new[] { 300, 370 });
+            AnnoPainter.Draw(g, mosaic, source);
+
+            // The selected item shows the dashed frame plus the eight grips.
+            var selected = AnnoItem.FromDrag(AnnoTool.RoundRect, new Point(452, 80), new Point(866, 280));
+            selected.ColorArgb = AnnoPalette.Colors[0].ToArgb();
+            selected.Width = 4f;
+            AnnoPainter.Draw(g, selected, source);
+            AnnoPainter.DrawSelection(g, selected, 1f);
+        }
+
+        canvas.Save(Path.Combine(folder, $"anno-sample-{tag}.png"), ImageFormat.Png);
     }
 
     private static void Seed(ClipboardService service)
@@ -176,6 +301,26 @@ internal static class UiDemo
         bitmap.Save(path, ImageFormat.Png);
         menu.Close();
         Pump();
+    }
+
+    /// <summary>Layered windows cannot be screen-grabbed, so read the frame they last presented.</summary>
+    private static void SaveLayered(Form form, string path)
+    {
+        Application.DoEvents();
+        using var frame = PillDraw.Snapshot(form);
+        if (frame == null)
+        {
+            return;
+        }
+
+        using var framed = new Bitmap(frame.Width + 24, frame.Height + 24, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(framed))
+        {
+            g.Clear(Theme.IsDark ? Color.FromArgb(24, 25, 28) : Color.FromArgb(236, 238, 242));
+            g.DrawImage(frame, 12, 12);
+        }
+
+        framed.Save(path, ImageFormat.Png);
     }
 
     private static void Save(Form form, string path)

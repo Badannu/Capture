@@ -19,11 +19,3 @@ internal enum SnipFollow
 }
 
 internal readonly record struct SnipResult(CaptureOutcome Outcome, SnipFollow Follow, Rectangle? Preset);
-
-internal enum AnnoTool
-{
-    Pen,
-    Arrow,
-    Highlight,
-    Mosaic,
-}

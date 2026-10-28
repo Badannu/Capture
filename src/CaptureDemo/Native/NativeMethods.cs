@@ -257,6 +257,36 @@ internal static class NativeMethods
         ref BLENDFUNCTION blend,
         uint flags);
 
+    /// <summary>
+    /// Pointers are kept as <see cref="IntPtr"/> so the caller can stack-allocate the
+    /// four small structs and only pay one interop call per frame.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct UPDATELAYEREDWINDOWINFO
+    {
+        public uint cbSize;
+        public IntPtr hdcDst;
+        public IntPtr pptDst;
+        public IntPtr psize;
+        public IntPtr hdcSrc;
+        public IntPtr pptSrc;
+        public uint crKey;
+        public IntPtr pblend;
+        public uint dwFlags;
+        public IntPtr prcDirty;
+    }
+
+    /// <summary>Same as <c>UpdateLayeredWindow</c> but accepts a dirty rect, so a small edit repaints small.</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool UpdateLayeredWindowIndirect(IntPtr hwnd, ref UPDATELAYEREDWINDOWINFO info);
+
+    /// <summary>
+    /// Raw block copy. <see cref="Marshal.Copy(IntPtr, byte[], int, int)"/> needs a managed
+    /// array, which turns one memcpy into thousands of small allocations per frame.
+    /// </summary>
+    [DllImport("kernel32.dll", EntryPoint = "RtlMoveMemory")]
+    public static extern void MoveMemory(IntPtr destination, IntPtr source, UIntPtr length);
+
     public static Rectangle VirtualScreen()
     {
         return new Rectangle(

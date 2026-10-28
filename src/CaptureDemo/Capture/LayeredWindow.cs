@@ -95,6 +95,10 @@ internal static class LayeredWindow
         }
     }
 
+    /// <summary>
+    /// Copies the bitmap into a DIB section's pixel memory. One memcpy when the stride is
+    /// tight (32bpp normally is), otherwise one memcpy per row — never a per-row allocation.
+    /// </summary>
     private static void CopyPremultiplied(Bitmap bitmap, IntPtr bits, int width, int height)
     {
         var rect = new Rectangle(0, 0, width, height);
@@ -103,15 +107,20 @@ internal static class LayeredWindow
         {
             var rowBytes = width * 4;
             var stride = data.Stride;
+            var flipped = stride < 0;
+            var absStride = Math.Abs(stride);
+            if (!flipped && absStride == rowBytes)
+            {
+                NativeMethods.MoveMemory(bits, data.Scan0, (UIntPtr)(uint)(rowBytes * height));
+                return;
+            }
+
             for (var y = 0; y < height; y++)
             {
-                var src = stride >= 0
-                    ? data.Scan0 + y * stride
-                    : data.Scan0 + (height - 1 - y) * stride;
-                var dst = bits + y * rowBytes;
-                var row = new byte[rowBytes];
-                Marshal.Copy(src, row, 0, rowBytes);
-                Marshal.Copy(row, 0, dst, rowBytes);
+                var src = flipped
+                    ? data.Scan0 + (height - 1 - y) * absStride
+                    : data.Scan0 + y * absStride;
+                NativeMethods.MoveMemory(bits + y * rowBytes, src, (UIntPtr)(uint)rowBytes);
             }
         }
         finally
